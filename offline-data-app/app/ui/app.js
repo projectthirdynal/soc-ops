@@ -608,27 +608,52 @@ async function startFileSplit() {
   const text = document.getElementById('splitProgressText');
   progressCard.style.display = 'block';
   bar.style.width = '0%';
-  text.textContent = 'Uploading and splitting...';
+  text.textContent = 'Uploading file...';
   document.getElementById('splitStartBtn').disabled = true;
 
   const form = new FormData();
   form.append('file', _splitFile);
 
   try {
-    // Use the standalone file split endpoint
-    const result = await apiFetch(
+    // Start the split (returns immediately, runs in background)
+    await apiFetch(
       `/api/split/file?chunk_size=${chunkSize}&output_folder=${encodeURIComponent(outputFolder)}`,
       { method: 'POST', body: form }
     );
 
-    bar.style.width = '100%';
-    text.textContent = `Done! ${result.total_files} XLSX files written to ${result.output_dir}`;
-    showToast(`Split complete: ${result.total_files} files`, 'success');
-    loadSplitHistory();
+    text.textContent = 'Splitting in progress...';
+
+    // Poll SSE progress
+    const es = new EventSource('/api/split/file/progress');
+    es.onmessage = ev => {
+      const d = JSON.parse(ev.data);
+      if (d.done && !d.error) {
+        bar.style.width = '100%';
+        text.textContent = `Done! ${d.files_written} XLSX files written to ${outputFolder}`;
+        es.close();
+        showToast(`Split complete: ${d.files_written} files`, 'success');
+        document.getElementById('splitStartBtn').disabled = false;
+        loadSplitHistory();
+        return;
+      }
+      if (d.error) {
+        text.textContent = `Error: ${d.error}`;
+        es.close();
+        showToast(`Split error: ${d.error}`, 'error');
+        document.getElementById('splitStartBtn').disabled = false;
+        return;
+      }
+      bar.style.width = `${d.progress}%`;
+      text.textContent = `${d.progress}% — ${d.files_written} files written...`;
+    };
+    es.onerror = () => {
+      es.close();
+      document.getElementById('splitStartBtn').disabled = false;
+    };
+
   } catch (e) {
     text.textContent = `Error: ${e.message}`;
     showToast(`Split error: ${e.message}`, 'error');
-  } finally {
     document.getElementById('splitStartBtn').disabled = false;
   }
 }

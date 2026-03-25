@@ -281,7 +281,16 @@ def _fetch_github_manifest(repo: str) -> UpdateManifest:
     api_url = f"https://api.github.com/repos/{repo}/releases/latest"
     logger.info("Checking GitHub releases: %s", api_url)
 
-    raw = _http_get(api_url)
+    try:
+        raw = _http_get(api_url)
+    except ConnectionError as exc:
+        if "404" in str(exc):
+            raise ValueError(
+                f"No releases found for {repo}. "
+                f"Create a release on GitHub with an attached installer .exe to enable updates."
+            ) from exc
+        raise
+
     release = json.loads(raw)
 
     manifest = UpdateManifest.from_github_release(release)
