@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOC Data Processor</title>
+  <style>
+    /* Embed Inter font subset for offline use — weight 400,500,600,700,800 */
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap; src:local('Inter Regular'),local('Inter-Regular'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap; src:local('Inter Medium'),local('Inter-Medium'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:600; font-display:swap; src:local('Inter SemiBold'),local('Inter-SemiBold'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:700; font-display:swap; src:local('Inter Bold'),local('Inter-Bold'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:800; font-display:swap; src:local('Inter ExtraBold'),local('Inter-ExtraBold'); }
+  </style>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<div id="updateBanner" class="update-banner" style="display:none">
+  <span id="updateBannerText"></span>
+  <button class="btn btn-sm btn-success" onclick="showUpdateModal()">View Update</button>
+  <button class="btn btn-sm btn-secondary" onclick="dismissUpdateBanner()">Dismiss</button>
+</div>
+
+<header class="app-header">
+  <div class="app-logo">
+    <span>&#128230;</span>
+    <span>SOC Data Processor</span>
+  </div>
+  <div id="headerStatus">No data loaded</div>
+  <button class="header-icon-btn" onclick="showUpdateModal()" title="Check for updates">&#8635;</button>
+  <button class="header-icon-btn" onclick="showSettingsModal()" title="Settings">&#9881;</button>
+</header>
+
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="dashboard">&#128200; Dashboard</button>
+  <button class="tab-btn" data-tab="upload">&#128229; Upload</button>
+  <button class="tab-btn" data-tab="search">&#128269; Search</button>
+  <button class="tab-btn" data-tab="split">&#9986; Split</button>
+  <button class="tab-btn" data-tab="aggregate">&#128202; Aggregate</button>
+  <button class="tab-btn" data-tab="cluster">&#127963; Cluster</button>
+  <button class="tab-btn" data-tab="export">&#128190; Export</button>
+</nav>
+
+<main class="app-main">
+
+  <!-- ==================== DASHBOARD TAB ==================== -->
+  <section id="tab-dashboard" class="tab-pane active">
+    <div class="section-header">
+      <h2>Dashboard</h2>
+      <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">&#8635; Refresh</button>
+    </div>
+
+    <div id="noDataBanner" class="no-data-banner">
+      <span class="no-data-icon">&#128229;</span>
+      <p>No data loaded. Go to <strong onclick="document.querySelector('[data-tab=upload]').click()">Upload</strong> to import a CSV or XLSX file.</p>
+    </div>
+
+    <div id="dashboardContent" style="display:none">
+      <!-- KPI cards -->
+      <div id="metricCards" class="metric-grid"></div>
+
+      <!-- Row 1: two distribution pie charts -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Loss Type Distribution</div>
+          <div class="chart-controls">
+            <label>Column:
+              <select id="distCol1" onchange="renderDistChart('distCol1','distCanvas1','distLegend1')"></select>
+            </label>
+          </div>
+          <canvas id="distCanvas1" class="chart-canvas"></canvas>
+          <div id="distLegend1" class="chart-legend"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Activity Breakdown</div>
+          <div class="chart-controls">
+            <label>Column:
+              <select id="distCol2" onchange="renderDistChart('distCol2','distCanvas2','distLegend2')"></select>
+            </label>
+          </div>
+          <canvas id="distCanvas2" class="chart-canvas"></canvas>
+          <div id="distLegend2" class="chart-legend"></div>
+        </div>
+      </div>
+
+      <!-- Row 2: top-by horizontal bar charts -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Top by Value</div>
+          <div class="chart-controls">
+            <label>Group:
+              <select id="topGroupCol1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')"></select>
+            </label>
+            <label>Value:
+              <select id="topValCol1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')"></select>
+            </label>
+            <label>Agg:
+              <select id="topAgg1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')">
+                <option value="sum" selected>SUM</option>
+                <option value="count">COUNT</option>
+                <option value="avg">AVG</option>
+              </select>
+            </label>
+          </div>
+          <canvas id="topCanvas1" class="chart-canvas"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Top by Count</div>
+          <div class="chart-controls">
+            <label>Group:
+              <select id="topGroupCol2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')"></select>
+            </label>
+            <label>Value:
+              <select id="topValCol2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')"></select>
+            </label>
+            <label>Agg:
+              <select id="topAgg2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')">
+                <option value="count" selected>COUNT</option>
+                <option value="sum">SUM</option>
+                <option value="avg">AVG</option>
+              </select>
+            </label>
+          </div>
+          <canvas id="topCanvas2" class="chart-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Row 3: timeline line chart -->
+      <div class="card">
+        <div class="chart-title">Records Over Time</div>
+        <div class="chart-controls">
+          <label>Date column:
+            <select id="timelineDateCol" onchange="renderTimelineChart()"></select>
+          </label>
+          <label>Granularity:
+            <select id="timelineGranularity" onchange="renderTimelineChart()">
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month" selected>Month</option>
+            </select>
+          </label>
+        </div>
+        <canvas id="timelineCanvas" class="chart-canvas chart-canvas-wide"></canvas>
+      </div>
+
+      <!-- Row 4: status distribution table -->
+      <div class="card">
+        <div class="chart-title">Column Value Distribution Table</div>
+        <div class="chart-controls">
+          <label>Column:
+            <select id="statusDistCol" onchange="renderStatusTable()"></select>
+          </label>
+          <label>Limit:
+            <select id="statusDistLimit" onchange="renderStatusTable()">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="30">30</option>
+            </select>
+          </label>
+        </div>
+        <div id="statusDistTable" class="table-wrap"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== UPLOAD TAB ==================== -->
+  <section id="tab-upload" class="tab-pane">
+    <div class="section-title">&#128229; Upload File</div>
+
+    <div class="card">
+      <div
+        id="dropZone"
+        class="drop-zone"
+        ondragover="event.preventDefault(); this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleDrop(event)"
+      >
+        <span class="upload-icon">&#128229;</span>
+        <p>Drag &amp; drop a <strong>CSV</strong> or <strong>XLSX</strong> file here</p>
+        <p class="muted">or</p>
+        <label class="btn btn-primary" style="cursor:pointer">
+          Browse File
+          <input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none" onchange="handleFileSelect(event)" />
+        </label>
+      </div>
+
+      <div class="append-toggle">
+        <label class="checkbox-item">
+          <input type="checkbox" id="appendMode">
+          <strong>Append to existing data</strong>
+          <span class="muted" style="font-size:0.85em;margin-left:0.5rem;">
+            (uncheck to replace existing data with this file)
+          </span>
+        </label>
+      </div>
+
+      <div id="uploadStatus" class="status-area" style="display:none"></div>
+    </div>
+
+    <div class="card" id="columnPreviewCard" style="display:none">
+      <div class="card-title">Imported Columns</div>
+      <div id="columnPreview" class="table-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Import History</div>
+      <div id="importHistory" class="table-wrap"><p class="muted">No imports yet.</p></div>
+    </div>
+  </section>
+
+  <!-- ==================== SEARCH TAB ==================== -->
+  <section id="tab-search" class="tab-pane">
+    <div class="section-title">&#128269; Search Data</div>
+
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group" style="flex:3">
+          <label class="form-label">Search</label>
+          <input type="text" id="searchQuery" class="form-control" placeholder="Type to search across all columns..." onkeydown="if(event.key==='Enter') runSearch()" />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label class="form-label">Columns</label>
+          <select id="searchColumns" class="form-control" multiple size="1">
+            <option value="">All columns</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:0;align-self:flex-end">
+          <button class="btn btn-primary" onclick="runSearch()">&#128269; Search</button>
+        </div>
+      </div>
+      <div id="searchFilterChips" style="margin-top:.5rem;display:flex;gap:.35rem;flex-wrap:wrap"></div>
+    </div>
+
+    <div class="card" id="searchResultsCard" style="display:none">
+      <div class="section-header">
+        <h3 id="searchResultCount">Results</h3>
+        <div class="pagination-ctrl">
+          <button class="btn btn-sm btn-secondary" onclick="searchPage(-1)">&#8249; Prev</button>
+          <span id="searchPageInfo" class="muted"></span>
+          <button class="btn btn-sm btn-secondary" onclick="searchPage(1)">Next &#8250;</button>
+        </div>
+      </div>
+      <div id="searchResults" class="table-wrap"></div>
+      <button class="btn btn-sm btn-secondary" style="margin-top:.75rem" onclick="exportSearchResults()">&#11015; Export Results (CSV)</button>
+    </div>
+
+    <div id="searchNoData" class="no-data-banner">
+      <span class="no-data-icon">&#128269;</span>
+      <p>Upload data first, then search here.</p>
+    </div>
+  </section>
+
+  <!-- ==================== SPLIT TAB ==================== -->
+  <section id="tab-split" class="tab-pane">
+    <div class="section-title">&#9986; Split Files</div>
+
+    <div class="card">
+      <div class="card-title">Upload File to Split</div>
+      <div id="splitDropZone" class="drop-zone"
+           ondragover="event.preventDefault(); this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleSplitDrop(event)">
+        <span class="upload-icon">&#128196;</span>
+        <p>Drag &amp; drop a <strong>CSV</strong> or <strong>XLSX</strong> file to split</p>
+        <p class="muted">or</p>
+        <label class="btn btn-primary" style="cursor:pointer">
+          Browse File
+          <input type="file" id="splitFileInput" accept=".csv,.xlsx" style="display:none" onchange="handleSplitFileSelect(event)" />
+        </label>
+      </div>
+      <p id="splitFileName" class="muted" style="margin-top:.5rem"></p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Split Settings</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Rows per file</label>
+          <input type="number" id="splitChunkSize" class="form-control" value="1000" min="1" max="100000" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Output folder</label>
+          <input type="text" id="splitOutputFolder" class="form-control" placeholder="C:\Users\you\Documents\split-output" />
+        </div>
+      </div>
+      <button class="btn btn-primary" id="splitStartBtn" onclick="startFileSplit()" disabled>&#9986; Split into XLSX Files</button>
+    </div>
+
+    <div class="card" id="splitProgressCard" style="display:none">
+      <div class="card-title">Progress</div>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="splitProgressBar" style="width:0%"></div>
+      </div>
+      <p id="splitProgressText" class="muted">Starting...</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Export History</div>
+      <div id="splitHistory" class="table-wrap"><p class="muted">No exports yet.</p></div>
+    </div>
+  </section>
+
+  <!-- ==================== AGGREGATE TAB ==================== -->
+  <section id="tab-aggregate" class="tab-pane">
+    <div class="section-title">&#128202; Aggregate Per Person</div>
+
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Person / group key</label>
+        <select id="aggPersonKey" class="form-control"></select>
+      </div>
+
+      <div class="agg-col-grid">
+        <div>
+          <div class="col-picker-label">Numeric columns <span class="badge">SUM / AVG / MIN / MAX</span></div>
+          <div id="numericColPicker" class="col-picker"></div>
+        </div>
+        <div>
+          <div class="col-picker-label">Date columns <span class="badge">FIRST / LAST</span></div>
+          <div id="dateColPicker" class="col-picker"></div>
+        </div>
+        <div>
+          <div class="col-picker-label">Category columns <span class="badge">MODE / COUNT DISTINCT</span></div>
+          <div id="catColPicker" class="col-picker"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="runAggregate()">&#9654; Run Aggregation</button>
+        <span id="aggSpinner" class="spinner" style="display:none"></span>
+      </div>
+    </div>
+
+    <div class="card" id="aggPreviewCard" style="display:none">
+      <div class="section-header">
+        <h3>Person Summary Preview</h3>
+        <div class="pagination-ctrl">
+          <button class="btn btn-sm btn-secondary" onclick="aggPage(-1)">&#8249; Prev</button>
+          <span id="aggPageInfo" class="muted"></span>
+          <button class="btn btn-sm btn-secondary" onclick="aggPage(1)">Next &#8250;</button>
+        </div>
+      </div>
+      <div id="aggPreview" class="table-wrap"></div>
+      <button class="btn btn-sm btn-secondary" style="margin-top:.75rem" onclick="exportAgg()">&#11015; Download CSV</button>
+    </div>
+  </section>
+
+  <!-- ==================== CLUSTER TAB ==================== -->
+  <section id="tab-cluster" class="tab-pane">
+    <div class="section-title">&#127963; Clustering</div>
+
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Algorithm</label>
+          <select id="clusterAlg" class="form-control">
+            <option value="MiniBatchKMeans" selected>MiniBatchKMeans (recommended)</option>
+            <option value="BIRCH">BIRCH</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Number of clusters</label>
+          <input type="number" id="clusterN" class="form-control" value="8" min="2" max="50" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="col-picker-label">Feature columns <span class="badge">numeric only</span></div>
+        <div id="clusterFeaturePicker" class="col-picker">
+          <p class="muted">Run aggregation first to enable clustering.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="runCluster()">&#127963; Run Clustering</button>
+        <span id="clusterSpinner" class="spinner" style="display:none"></span>
+      </div>
+    </div>
+
+    <div class="card" id="clusterResultCard" style="display:none">
+      <div class="card-title">Cluster Distribution</div>
+      <canvas id="clusterBarCanvas" class="chart-canvas"></canvas>
+      <div id="clusterDistTable" class="table-wrap" style="margin-top:1rem"></div>
+
+      <div class="section-header" style="margin-top:1.5rem">
+        <h3>Results Preview</h3>
+        <div class="pagination-ctrl">
+          <button class="btn btn-sm btn-secondary" onclick="clusterPage(-1)">&#8249; Prev</button>
+          <span id="clusterPageInfo" class="muted"></span>
+          <button class="btn btn-sm btn-secondary" onclick="clusterPage(1)">Next &#8250;</button>
+        </div>
+      </div>
+      <div id="clusterPreview" class="table-wrap"></div>
+      <button class="btn btn-sm btn-secondary" style="margin-top:.75rem" onclick="exportCluster()">&#11015; Download CSV</button>
+    </div>
+  </section>
+
+  <!-- ==================== EXPORT TAB ==================== -->
+  <section id="tab-export" class="tab-pane">
+    <div class="section-title">&#128190; Export</div>
+
+    <div class="export-grid">
+      <div class="card export-card">
+        <div class="export-icon">&#128202;</div>
+        <h3>Person Summary</h3>
+        <p class="muted">Aggregated per-person metrics table.</p>
+        <button class="btn btn-primary" onclick="exportAgg()">&#11015; Download CSV</button>
+      </div>
+      <div class="card export-card">
+        <div class="export-icon">&#127963;</div>
+        <h3>Clustered Data</h3>
+        <p class="muted">Person summary with cluster_id labels.</p>
+        <button class="btn btn-primary" onclick="exportCluster()">&#11015; Download CSV</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Cluster Run History</div>
+      <div id="clusterHistory" class="table-wrap"><p class="muted">No cluster runs yet.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ==================== UPDATE MODAL ==================== -->
+<div id="updateModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeUpdateModal()">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>&#8635; Software Update</h2>
+      <button class="modal-close" onclick="closeUpdateModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="updateModalLoading" style="display:none">
+        <span class="spinner"></span> Checking for updates...
+      </div>
+      <div id="updateModalNoConfig" style="display:none">
+        <div class="info-box">
+          No update source configured. Open <strong style="cursor:pointer" onclick="closeUpdateModal();showSettingsModal()">Settings</strong> to set one.
+        </div>
+      </div>
+      <div id="updateModalError" style="display:none">
+        <div class="error-box" id="updateModalErrorText"></div>
+      </div>
+      <div id="updateModalUpToDate" style="display:none">
+        <div class="success-box">&#10003; You are running the latest version (<span id="updateCurrentVerText"></span>).</div>
+      </div>
+      <div id="updateModalAvailable" style="display:none">
+        <div class="update-info-card">
+          <div class="update-versions">
+            <div class="update-ver-block">
+              <div class="muted">Installed</div>
+              <div class="update-ver-value" id="updateModalCurVer"></div>
+            </div>
+            <div class="update-ver-arrow">&#10132;</div>
+            <div class="update-ver-block">
+              <div class="muted">Available</div>
+              <div class="update-ver-value update-ver-new" id="updateModalNewVer"></div>
+            </div>
+          </div>
+          <div id="updateModalBuildDate" class="muted" style="margin-top:.5rem"></div>
+          <div id="updateModalMandatory" class="badge" style="display:none;margin-top:.5rem;background:#fef2f2;color:#991b1b">Mandatory Update</div>
+        </div>
+        <div id="updateModalChangelog" class="update-changelog"></div>
+        <div class="update-actions">
+          <button id="updateDownloadBtn" class="btn btn-primary" onclick="downloadUpdate()">&#11015; Download Update</button>
+          <button id="updateInstallBtn" class="btn btn-success" onclick="installUpdate()" style="display:none">&#9654; Install &amp; Restart</button>
+          <span id="updateDownloadSpinner" class="spinner" style="display:none"></span>
+          <span id="updateDownloadStatus" class="muted"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SETTINGS MODAL ==================== -->
+<div id="settingsModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSettingsModal()">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>&#9881; Settings</h2>
+      <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Update Source Path</label>
+        <input type="text" id="settingsUpdateSource" class="form-control"
+               placeholder="github:projectthirdynal/soc-ops" />
+        <p class="muted" style="margin-top:.3rem">
+          GitHub repo (<code>github:owner/repo</code>), network path (<code>\\server\updates</code>), or HTTP URL. Leave empty to disable.
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="checkbox-item">
+          <input type="checkbox" id="settingsCheckOnStartup" checked>
+          Check for updates on startup
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Download Directory (optional)</label>
+        <input type="text" id="settingsDownloadDir" class="form-control"
+               placeholder="Leave empty for default" />
+        <p class="muted" style="margin-top:.3rem">
+          Where to save downloaded installers. Defaults to the application data directory.
+        </p>
+      </div>
+      <div style="margin-top:1.5rem;display:flex;gap:.75rem">
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== VERSION FOOTER ==================== -->
+<div id="versionFooter" class="version-footer">
+  <span id="versionText">v...</span>
+</div>
+
+<div id="toast" style="display:none"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
