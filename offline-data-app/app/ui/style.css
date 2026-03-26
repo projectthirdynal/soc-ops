@@ -130,6 +130,13 @@ body {
   user-select: none;
 }
 
+.app-logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
 .app-logo span:first-child {
   display: flex;
   align-items: center;
@@ -965,6 +972,42 @@ tr:hover td { background: var(--brand-50); }
 }
 
 .update-banner .btn { flex-shrink: 0; }
+
+/* Global split progress bar — sits between header and tabs */
+#globalSplitBar {
+  background: #f0fdf4;
+  border-bottom: 2px solid #10b981;
+  padding: .45rem 1.75rem;
+  z-index: 100;
+}
+.global-split-inner {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #065f46;
+}
+.global-split-track {
+  flex: 1;
+  background: #d1fae5;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+  min-width: 80px;
+}
+.global-split-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.global-split-pct {
+  min-width: 3.2rem;
+  text-align: right;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ===================================================================
    HEADER ICON BUTTONS

@@ -563,6 +563,68 @@ function handleSplitDrop(e) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Global split SSE — persists across tab switches
+// ---------------------------------------------------------------------------
+let _splitES = null;
+
+function _updateSplitUI(d) {
+  // Global bar (always visible)
+  const pct = Math.round(d.progress || 0);
+  document.getElementById('globalSplitFill').style.width = `${pct}%`;
+  document.getElementById('globalSplitPct').textContent = `${pct}%`;
+  document.getElementById('globalSplitLabel').textContent =
+    d.done ? `Split complete — ${d.files_written} files` :
+    d.error ? 'Split error' :
+    `Splitting… ${d.files_written || 0} files`;
+
+  // In-tab progress card (only when on split tab)
+  const bar  = document.getElementById('splitProgressBar');
+  const text = document.getElementById('splitProgressText');
+  if (bar)  bar.style.width  = `${pct}%`;
+  if (text) text.textContent = d.done
+    ? `Done! ${d.files_written} XLSX files written.`
+    : d.error ? `Error: ${d.error}`
+    : `${pct}% — ${d.files_written || 0} files written…`;
+}
+
+function _connectSplitSSE(outputFolder) {
+  if (_splitES) { _splitES.close(); _splitES = null; }
+
+  document.getElementById('globalSplitBar').style.display = 'block';
+  document.getElementById('globalSplitSpinner').style.display = 'inline-block';
+
+  _splitES = new EventSource('/api/split/file/progress');
+  _splitES.onmessage = ev => {
+    const d = JSON.parse(ev.data);
+    _updateSplitUI(d);
+
+    if (d.done && !d.error) {
+      _splitES.close(); _splitES = null;
+      document.getElementById('globalSplitSpinner').style.display = 'none';
+      showToast(`Split complete: ${d.files_written} files written to ${outputFolder || 'output folder'}`, 'success');
+      document.getElementById('splitStartBtn').disabled = false;
+      loadSplitHistory();
+      // Keep bar visible for 4 s then hide
+      setTimeout(() => { document.getElementById('globalSplitBar').style.display = 'none'; }, 4000);
+      return;
+    }
+    if (d.error) {
+      _splitES.close(); _splitES = null;
+      document.getElementById('globalSplitSpinner').style.display = 'none';
+      showToast(`Split error: ${d.error}`, 'error');
+      document.getElementById('splitStartBtn').disabled = false;
+      setTimeout(() => { document.getElementById('globalSplitBar').style.display = 'none'; }, 4000);
+    }
+  };
+  _splitES.onerror = () => {
+    // SSE dropped (e.g. server restart) — silently close
+    if (_splitES) { _splitES.close(); _splitES = null; }
+    document.getElementById('globalSplitSpinner').style.display = 'none';
+    document.getElementById('splitStartBtn').disabled = false;
+  };
+}
+
 async function startFileSplit() {
   if (!_splitFile) { showToast('Please select a file first.', 'error'); return; }
 
@@ -572,58 +634,42 @@ async function startFileSplit() {
   if (!outputFolder) { showToast('Please specify an output folder.', 'error'); return; }
 
   const progressCard = document.getElementById('splitProgressCard');
-  const bar = document.getElementById('splitProgressBar');
+  const bar  = document.getElementById('splitProgressBar');
   const text = document.getElementById('splitProgressText');
   progressCard.style.display = 'block';
   bar.style.width = '0%';
-  text.textContent = 'Uploading file...';
+  text.textContent = 'Uploading file…';
   document.getElementById('splitStartBtn').disabled = true;
 
   const form = new FormData();
   form.append('file', _splitFile);
 
   try {
-    // Start the split (returns immediately, runs in background)
     await apiFetch(
       `/api/split/file?chunk_size=${chunkSize}&output_folder=${encodeURIComponent(outputFolder)}`,
       { method: 'POST', body: form }
     );
-
-    text.textContent = 'Splitting in progress...';
-
-    // Poll SSE progress
-    const es = new EventSource('/api/split/file/progress');
-    es.onmessage = ev => {
-      const d = JSON.parse(ev.data);
-      if (d.done && !d.error) {
-        bar.style.width = '100%';
-        text.textContent = `Done! ${d.files_written} XLSX files written to ${outputFolder}`;
-        es.close();
-        showToast(`Split complete: ${d.files_written} files`, 'success');
-        document.getElementById('splitStartBtn').disabled = false;
-        loadSplitHistory();
-        return;
-      }
-      if (d.error) {
-        text.textContent = `Error: ${d.error}`;
-        es.close();
-        showToast(`Split error: ${d.error}`, 'error');
-        document.getElementById('splitStartBtn').disabled = false;
-        return;
-      }
-      bar.style.width = `${d.progress}%`;
-      text.textContent = `${d.progress}% — ${d.files_written} files written...`;
-    };
-    es.onerror = () => {
-      es.close();
-      document.getElementById('splitStartBtn').disabled = false;
-    };
-
+    text.textContent = 'Splitting in progress…';
+    _connectSplitSSE(outputFolder);
   } catch (e) {
     text.textContent = `Error: ${e.message}`;
     showToast(`Split error: ${e.message}`, 'error');
     document.getElementById('splitStartBtn').disabled = false;
   }
+}
+
+/** Called on page load — reconnect if a split is already in progress. */
+async function resumeSplitIfRunning() {
+  try {
+    const s = await apiFetch('/api/split/file/status');
+    if (s.running) {
+      _updateSplitUI(s);
+      _connectSplitSSE('');
+      document.getElementById('splitStartBtn').disabled = true;
+      const progressCard = document.getElementById('splitProgressCard');
+      if (progressCard) progressCard.style.display = 'block';
+    }
+  } catch (e) { /* non-fatal */ }
 }
 
 async function loadSplitHistory() {
@@ -1015,18 +1061,49 @@ async function silentUpdateCheck() {
   try {
     const data = await apiFetch('/api/update/check');
     _lastUpdateCheck = data;
-    if (data.update_available) {
-      document.getElementById('updateBannerText').textContent =
-        `Update available: v${data.remote_version} — ${data.changelog.split('\n')[0] || 'New version ready'}`;
-      document.getElementById('updateBanner').style.display = 'flex';
+    if (!data.update_available) return;
+
+    // Auto-download in background — show progress in banner
+    _showBanner(`Downloading update v${data.remote_version}…`, 'downloading');
+
+    const dl = await apiFetch('/api/update/download', { method: 'POST' });
+    if (!dl.success) {
+      console.warn('Auto-download failed:', dl.error);
+      document.getElementById('updateBanner').style.display = 'none';
+      return;
     }
+
+    // Download done — show compact "Apply now?" prompt (no dismiss, no "later")
+    _showBanner(`Update v${data.remote_version} is ready.`, 'ready');
   } catch (e) {
     console.warn('Silent update check failed:', e);
   }
 }
 
+function _showBanner(text, state) {
+  const banner = document.getElementById('updateBanner');
+  const textEl = document.getElementById('updateBannerText');
+  const applyBtn = document.getElementById('updateBannerApplyBtn');
+  const spinner = document.getElementById('updateBannerSpinner');
+  textEl.textContent = text;
+  applyBtn.style.display = state === 'ready' ? 'inline-flex' : 'none';
+  spinner.style.display = state === 'downloading' ? 'inline-block' : 'none';
+  banner.style.display = 'flex';
+}
+
 function dismissUpdateBanner() {
   document.getElementById('updateBanner').style.display = 'none';
+}
+
+async function applyBannerUpdate() {
+  document.getElementById('updateBannerApplyBtn').disabled = true;
+  document.getElementById('updateBannerText').textContent = 'Launching installer…';
+  try {
+    await apiFetch('/api/update/install', { method: 'POST' });
+  } catch (e) {
+    showToast(`Install error: ${e.message}`, 'error');
+    document.getElementById('updateBannerApplyBtn').disabled = false;
+  }
 }
 
 async function showUpdateModal() {
@@ -1211,6 +1288,7 @@ async function fullInit() {
   loadVersionFooter();
   await init();
   prefillExportPaths();
+  resumeSplitIfRunning();
   silentUpdateCheck();
 }
 

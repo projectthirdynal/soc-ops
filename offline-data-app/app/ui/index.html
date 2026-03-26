@@ -17,20 +17,32 @@
 <body>
 
 <div id="updateBanner" class="update-banner" style="display:none">
+  <span id="updateBannerSpinner" class="spinner" style="display:none"></span>
   <span id="updateBannerText"></span>
-  <button class="btn btn-sm btn-success" onclick="showUpdateModal()">View Update</button>
-  <button class="btn btn-sm btn-secondary" onclick="dismissUpdateBanner()">Dismiss</button>
+  <button id="updateBannerApplyBtn" class="btn btn-sm btn-success" onclick="applyBannerUpdate()" style="display:none">&#9654; Apply Now</button>
 </div>
 
 <header class="app-header">
   <div class="app-logo">
-    <span>&#128203;</span>
+    <img src="/static/logo.png" alt="AsiaNow" class="app-logo-img" onerror="this.style.display='none'" />
     <span>ASN Claims Processor</span>
   </div>
   <div id="headerStatus">No data loaded</div>
   <button class="header-icon-btn" onclick="showUpdateModal()" title="Check for updates">&#8635;</button>
   <button class="header-icon-btn" onclick="showSettingsModal()" title="Settings">&#9881;</button>
 </header>
+
+<!-- Global split progress bar — visible on all tabs while splitting runs -->
+<div id="globalSplitBar" style="display:none">
+  <div class="global-split-inner">
+    <span class="spinner" id="globalSplitSpinner"></span>
+    <span id="globalSplitLabel">Splitting file…</span>
+    <div class="global-split-track">
+      <div class="global-split-fill" id="globalSplitFill" style="width:0%"></div>
+    </div>
+    <span id="globalSplitPct" class="global-split-pct">0%</span>
+  </div>
+</div>
 
 <nav class="tab-nav">
   <button class="tab-btn active" data-tab="dashboard">&#128200; Dashboard</button>

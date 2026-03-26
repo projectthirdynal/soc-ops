@@ -342,6 +342,13 @@ def _run_file_split(
         Path(tmp_path).unlink(missing_ok=True)
 
 
+@router.get("/split/file/status")
+async def file_split_status() -> dict[str, Any]:
+    """Return current file-split progress as plain JSON (for reconnect checks)."""
+    with _file_split_lock:
+        return dict(_file_split_progress)
+
+
 @router.get("/split/file/progress")
 async def file_split_progress_sse() -> StreamingResponse:
     """SSE endpoint streaming standalone file-split progress events."""
