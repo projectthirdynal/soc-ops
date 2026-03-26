@@ -1300,8 +1300,63 @@ async function prefillExportPaths() {
   }
 }
 
+// ============================================================  TRIAL  ====
+
+let _trialCountdownTimer = null;
+
+async function checkTrial() {
+  try {
+    const s = await apiFetch('/api/trial/status');
+    if (s.expired || s.tampered) {
+      _showTrialExpired();
+      return;
+    }
+    _startTrialCountdown(s.remaining_seconds);
+  } catch (e) {
+    console.warn('Trial check failed:', e);
+  }
+}
+
+function _showTrialExpired() {
+  // Show full-screen lock, hide everything else
+  document.getElementById('trialBanner').style.display = 'none';
+  document.getElementById('trialExpiredOverlay').style.display = 'flex';
+  // Disable all nav buttons so keyboard-tab can't reach app content
+  document.querySelectorAll('.tab-btn, .header-icon-btn').forEach(b => b.disabled = true);
+}
+
+function _startTrialCountdown(remainingSeconds) {
+  const banner = document.getElementById('trialBanner');
+  const label  = document.getElementById('trialTimeLeft');
+  if (!banner || !label) return;
+
+  let secs = remainingSeconds;
+
+  function _tick() {
+    if (secs <= 0) {
+      clearInterval(_trialCountdownTimer);
+      _showTrialExpired();
+      return;
+    }
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    label.textContent = h > 0
+      ? `${h}h ${m.toString().padStart(2,'0')}m`
+      : `${m}m ${s.toString().padStart(2,'0')}s`;
+    secs--;
+  }
+
+  banner.style.display = 'flex';
+  _tick();
+  _trialCountdownTimer = setInterval(_tick, 1000);
+}
+
 async function fullInit() {
   loadVersionFooter();
+  await checkTrial();
+  // Abort remaining init if trial expired (overlay is showing)
+  if (document.getElementById('trialExpiredOverlay').style.display !== 'none') return;
   await init();
   prefillExportPaths();
   resumeSplitIfRunning();

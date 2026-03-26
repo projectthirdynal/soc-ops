@@ -6,8 +6,8 @@ import logging
 import time
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pathlib import Path
 
 from app.core.version import VERSION
@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 from app.api.ops_lock import acquire_operation, release_operation
 
 __all__ = ["create_app", "acquire_operation", "release_operation"]
+
+# API paths exempt from trial enforcement
+_TRIAL_EXEMPT = frozenset({
+    "/api/health",
+    "/api/trial/status",
+})
 
 # Paths that should not be logged to avoid noise
 _QUIET_PATHS = frozenset({
@@ -45,6 +51,22 @@ def create_app() -> FastAPI:
         description="Offline desktop claims data processing application",
         version=VERSION,
     )
+
+    # ------------------------------------------------------------------
+    # Trial enforcement middleware (runs before logging middleware)
+    # ------------------------------------------------------------------
+    @application.middleware("http")
+    async def enforce_trial(request: Request, call_next) -> Response:
+        path = request.url.path
+        if path.startswith("/api/") and path not in _TRIAL_EXEMPT:
+            from app.core.trial import get_trial_status
+            status = get_trial_status()
+            if status.get("expired"):
+                return JSONResponse(
+                    status_code=402,
+                    content={"detail": "trial_expired"},
+                )
+        return await call_next(request)
 
     # ------------------------------------------------------------------
     # Request logging middleware
@@ -91,8 +113,9 @@ def create_app() -> FastAPI:
     # Routers (imported here to avoid circular imports — route modules
     # import acquire_operation / release_operation from app.api)
     # ------------------------------------------------------------------
-    from app.api.routes import upload, split, aggregate, cluster, dashboard, update, search, data, fileexport
+    from app.api.routes import upload, split, aggregate, cluster, dashboard, update, search, data, fileexport, trial
 
+    application.include_router(trial.router, prefix="/api", tags=["trial"])
     application.include_router(upload.router, prefix="/api", tags=["upload"])
     application.include_router(split.router, prefix="/api", tags=["split"])
     application.include_router(aggregate.router, prefix="/api", tags=["aggregate"])

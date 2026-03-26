@@ -16,6 +16,27 @@
 </head>
 <body>
 
+<!-- Trial countdown banner -->
+<div id="trialBanner" class="trial-banner" style="display:none">
+  <span>&#9201; Free trial — <strong id="trialTimeLeft"></strong> remaining</span>
+  <span class="trial-banner-sub">Contact <strong>hello@asianow.ph</strong> to activate your licence.</span>
+</div>
+
+<!-- Trial expired lock screen (full-page, non-dismissible) -->
+<div id="trialExpiredOverlay" class="trial-overlay" style="display:none">
+  <div class="trial-expired-card">
+    <div class="trial-expired-icon">&#128274;</div>
+    <h2>Your free trial has ended</h2>
+    <p>Thank you for trying <strong>ASN Claims Processor</strong>.</p>
+    <p>To continue using the application, please purchase a licence.</p>
+    <div class="trial-contact-box">
+      <div>&#128231; <strong>hello@asianow.ph</strong></div>
+      <div>&#128241; <strong>+63 917 123 4567</strong></div>
+    </div>
+    <p class="trial-expired-sub">Once you receive your activation key, contact your administrator to unlock this device.</p>
+  </div>
+</div>
+
 <div id="updateBanner" class="update-banner" style="display:none">
   <span id="updateBannerSpinner" class="spinner" style="display:none"></span>
   <span id="updateBannerText"></span>

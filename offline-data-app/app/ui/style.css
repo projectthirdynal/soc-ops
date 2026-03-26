@@ -960,6 +960,85 @@ tr:hover td { background: var(--brand-50); }
 }
 
 /* ===================================================================
+   TRIAL BANNER & EXPIRED OVERLAY
+   =================================================================== */
+
+.trial-banner {
+  background: linear-gradient(90deg, #92400e, #b45309, #d97706);
+  color: #fff;
+  padding: .55rem 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: .83rem;
+  font-weight: 600;
+  animation: bannerSlide .35s ease;
+}
+
+.trial-banner-sub {
+  font-weight: 400;
+  opacity: .85;
+  font-size: .78rem;
+}
+
+.trial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, .72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trial-expired-card {
+  background: var(--bg-card);
+  border-radius: 1.25rem;
+  padding: 3rem 3.5rem;
+  max-width: 480px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+}
+
+.trial-expired-icon {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+}
+
+.trial-expired-card h2 {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: .75rem;
+}
+
+.trial-expired-card p {
+  color: var(--text-secondary);
+  margin-bottom: .6rem;
+  line-height: 1.6;
+}
+
+.trial-contact-box {
+  background: var(--bg-main);
+  border: 1px solid var(--border-light);
+  border-radius: .75rem;
+  padding: 1rem 1.5rem;
+  margin: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  font-size: .93rem;
+  color: var(--text-primary);
+}
+
+.trial-expired-sub {
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-top: .5rem;
+}
+
+/* ===================================================================
    UPDATE BANNER
    =================================================================== */
 .update-banner {
