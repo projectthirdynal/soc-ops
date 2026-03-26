@@ -217,7 +217,10 @@ def _import_csv(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) 
     """
     read_path, created_tmp = _ensure_utf8(path)
     try:
-        rel = db.read_csv(read_path, header=True)
+        # Use lenient options: wide files (100s of columns) and non-standard
+        # CSVs can confuse DuckDB's sniffer in strict mode.
+        csv_opts = "strict_mode=false, ignore_errors=true, null_padding=true"
+        rel = db.read_csv(read_path, header=True, strict_mode=False, ignore_errors=True, null_padding=True)
         original_cols = rel.columns
 
         normalized = _deduplicate_columns([_normalize_column_name(c) for c in original_cols])
@@ -237,11 +240,10 @@ def _import_csv(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) 
         except Exception:
             pass
 
-        # Use parameterised path via DuckDB's read_csv_auto($1) syntax
         if append and table_exists:
-            db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM read_csv_auto(?)", [read_path])
+            db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM read_csv_auto(?, {csv_opts})", [read_path])
         else:
-            db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM read_csv_auto(?)", [read_path])
+            db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM read_csv_auto(?, {csv_opts})", [read_path])
 
         row_count_result = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()
         return row_count_result[0] if row_count_result else 0, normalized
