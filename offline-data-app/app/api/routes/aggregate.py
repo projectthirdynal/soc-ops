@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import io
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+import openpyxl
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.aggregator import aggregate_persons
+from app.core.config import settings
 from app.api import acquire_operation, release_operation
 
 logger = logging.getLogger(__name__)
@@ -133,10 +135,8 @@ async def preview_aggregate(
 
 
 @router.get("/aggregate/export")
-async def export_aggregate() -> StreamingResponse:
-    """Export person_summary as a streaming CSV file download."""
-    import csv
-
+async def export_aggregate() -> dict[str, Any]:
+    """Save person_summary as XLSX to Documents/ASN Claims Processor and return the path."""
     db = get_db()
 
     try:
@@ -145,30 +145,23 @@ async def export_aggregate() -> StreamingResponse:
         raise HTTPException(status_code=400, detail="person_summary not yet created.")
 
     columns = [d[0] for d in desc]
-    total_result = db.execute("SELECT COUNT(*) FROM person_summary").fetchone()
-    total = total_result[0] if total_result else 0
+    rows = db.execute("SELECT * FROM person_summary").fetchall()
 
-    def _csv_generator():
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(columns)
-        yield buf.getvalue()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "person_summary"
+    ws.append(columns)
+    for row in rows:
+        ws.append(list(row))
 
-        chunk = 10_000
-        for offset in range(0, total, chunk):
-            buf = io.StringIO()
-            writer = csv.writer(buf)
-            rows = db.execute(
-                "SELECT * FROM person_summary LIMIT ? OFFSET ?", [chunk, offset]
-            ).fetchall()
-            writer.writerows(rows)
-            yield buf.getvalue()
+    out_dir = settings.EXPORTS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = out_dir / f"person_summary_{timestamp}.xlsx"
+    wb.save(str(out_path))
 
-    return StreamingResponse(
-        _csv_generator(),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=person_summary.csv"},
-    )
+    logger.info("Aggregate export saved: %s", out_path)
+    return {"path": str(out_path), "filename": out_path.name, "rows": len(rows)}
 
 
 @router.get("/aggregate/columns")

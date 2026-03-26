@@ -434,6 +434,7 @@ async function renderRecentClaims() {
 }
 
 async function exportDashboard() {
+  showToast('Exporting…', 'info');
   try {
     const res = await fetch('/api/search', {
       method: 'POST',
@@ -444,12 +445,13 @@ async function exportDashboard() {
     const data = await res.json();
     if (!data.rows.length) { showToast('No data to export.', 'error'); return; }
     const keys = Object.keys(data.rows[0]);
-    const csv  = [keys.join(','), ...data.rows.map(r => keys.map(k => {
-      const v = String(r[k] ?? '');
-      return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
-    }).join(','))].join('\n');
-    triggerDownload(new Blob([csv], { type: 'text/csv' }), 'claims_export.csv');
-    showToast('Export complete.', 'success');
+    const rows = [keys, ...data.rows.map(r => keys.map(k => r[k] ?? ''))];
+    const result = await apiFetch('/api/export/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'claims_export', rows }),
+    });
+    showToast(`Saved to ${result.path}`, 'success');
   } catch (e) {
     showToast(`Export error: ${e.message}`, 'error');
   }
@@ -730,11 +732,10 @@ function aggPage(delta) {
 }
 
 async function exportAgg() {
+  showToast('Exporting…', 'info');
   try {
-    const res = await fetch('/api/aggregate/export');
-    if (!res.ok) throw new Error('Export failed');
-    const blob = await res.blob();
-    triggerDownload(blob, 'person_summary.csv');
+    const result = await apiFetch('/api/aggregate/export');
+    showToast(`Saved to ${result.path}`, 'success');
   } catch (e) {
     showToast(`Export error: ${e.message}`, 'error');
   }
@@ -827,11 +828,10 @@ function clusterPage(delta) {
 }
 
 async function exportCluster() {
+  showToast('Exporting…', 'info');
   try {
-    const res = await fetch('/api/cluster/export');
-    if (!res.ok) throw new Error('Export failed');
-    const blob = await res.blob();
-    triggerDownload(blob, 'clustered_persons.csv');
+    const result = await apiFetch('/api/cluster/export');
+    showToast(`Saved to ${result.path}`, 'success');
   } catch (e) {
     showToast(`Export error: ${e.message}`, 'error');
   }
@@ -920,35 +920,25 @@ function searchPage(delta) {
 }
 
 async function exportSearchResults() {
-  showToast('Exporting current search results...', 'info');
-  // Fetch a large page of results
+  showToast('Exporting…', 'info');
   const query = document.getElementById('searchQuery').value.trim();
   const colSelect = document.getElementById('searchColumns');
   const selectedCols = [...colSelect.selectedOptions].map(o => o.value).filter(v => v);
-
   try {
-    const result = await apiFetch('/api/search', {
+    const data = await apiFetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: query,
-        columns: selectedCols,
-        page: 1,
-        page_size: 100000,
-      }),
+      body: JSON.stringify({ query, columns: selectedCols, page: 1, page_size: 100000 }),
     });
-
-    if (!result.rows.length) { showToast('No results to export.', 'error'); return; }
-
-    const keys = Object.keys(result.rows[0]);
-    const csv = [keys.join(','), ...result.rows.map(r => keys.map(k => {
-      const v = String(r[k] ?? '');
-      return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
-    }).join(','))].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    triggerDownload(blob, `search_results.csv`);
-    showToast('Export complete.', 'success');
+    if (!data.rows.length) { showToast('No results to export.', 'error'); return; }
+    const keys = Object.keys(data.rows[0]);
+    const rows = [keys, ...data.rows.map(r => keys.map(k => r[k] ?? ''))];
+    const result = await apiFetch('/api/export/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'search_results', rows }),
+    });
+    showToast(`Saved to ${result.path}`, 'success');
   } catch (e) {
     showToast(`Export error: ${e.message}`, 'error');
   }
@@ -1205,9 +1195,22 @@ async function saveSettings() {
 // ---------------------------------------------------------------------------
 resizeAllCanvases();
 
+async function prefillExportPaths() {
+  try {
+    const { path } = await apiFetch('/api/export/default-dir');
+    const splitField = document.getElementById('splitOutputFolder');
+    if (splitField && !splitField.value) splitField.value = path;
+    const dlField = document.getElementById('settingsDownloadDir');
+    if (dlField && !dlField.value) dlField.value = path;
+  } catch (e) {
+    // non-fatal
+  }
+}
+
 async function fullInit() {
   loadVersionFooter();
   await init();
+  prefillExportPaths();
   silentUpdateCheck();
 }
 
