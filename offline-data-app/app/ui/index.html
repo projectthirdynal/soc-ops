@@ -24,8 +24,8 @@
 
 <header class="app-header">
   <div class="app-logo">
-    <span>&#128230;</span>
-    <span>SOC Data Processor</span>
+    <span>&#128203;</span>
+    <span>Claims Dashboard</span>
   </div>
   <div id="headerStatus">No data loaded</div>
   <button class="header-icon-btn" onclick="showUpdateModal()" title="Check for updates">&#8635;</button>
@@ -46,10 +46,6 @@
 
   <!-- ==================== DASHBOARD TAB ==================== -->
   <section id="tab-dashboard" class="tab-pane active">
-    <div class="section-header">
-      <h2>Dashboard</h2>
-      <button class="btn btn-sm btn-secondary" onclick="loadDashboard()">&#8635; Refresh</button>
-    </div>
 
     <div id="noDataBanner" class="no-data-banner">
       <span class="no-data-icon">&#128229;</span>
@@ -57,110 +53,100 @@
     </div>
 
     <div id="dashboardContent" style="display:none">
-      <!-- KPI cards -->
-      <div id="metricCards" class="metric-grid"></div>
 
-      <!-- Row 1: two distribution pie charts -->
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-title">Loss Type Distribution</div>
-          <div class="chart-controls">
-            <label>Column:
-              <select id="distCol1" onchange="renderDistChart('distCol1','distCanvas1','distLegend1')"></select>
-            </label>
-          </div>
-          <canvas id="distCanvas1" class="chart-canvas"></canvas>
-          <div id="distLegend1" class="chart-legend"></div>
+      <!-- Dashboard Header -->
+      <div class="dash-header">
+        <div>
+          <h2><span class="dash-dot"></span> Claims Dashboard &mdash; Lost in Premise</h2>
+          <div class="dash-subtitle" id="dashSubtitle">Loading…</div>
         </div>
-        <div class="chart-card">
-          <div class="chart-title">Activity Breakdown</div>
-          <div class="chart-controls">
-            <label>Column:
-              <select id="distCol2" onchange="renderDistChart('distCol2','distCanvas2','distLegend2')"></select>
-            </label>
-          </div>
-          <canvas id="distCanvas2" class="chart-canvas"></canvas>
-          <div id="distLegend2" class="chart-legend"></div>
+        <div style="display:flex;gap:.6rem;align-items:center">
+          <button class="btn btn-sm btn-secondary" onclick="exportDashboard()">&#11015; Export</button>
+          <button class="btn btn-sm btn-primary" onclick="loadDashboard()">&#8635; Refresh</button>
         </div>
       </div>
 
-      <!-- Row 2: top-by horizontal bar charts -->
+      <!-- Filter bar -->
+      <div class="dash-filter-bar">
+        <label>Hub</label>
+        <select id="filterHub" onchange="applyDashboardFilter()">
+          <option value="">All Hubs</option>
+        </select>
+        <div class="dash-filter-spacer"></div>
+        <span id="dashFilterStatus" class="muted" style="font-size:.78rem"></span>
+      </div>
+
+      <!-- KPI cards (6) -->
+      <div id="kpiGrid" class="kpi-grid-6"></div>
+
+      <!-- Row 1: COGS Distribution | Hub Performance -->
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-title">Top by Value</div>
+          <div class="chart-title">&#128200; COGS Share Distribution</div>
+          <canvas id="cogsDistCanvas" class="chart-canvas"></canvas>
+          <div id="cogsDistLegend" class="chart-legend"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">&#127963; Hub Performance Analysis</div>
+          <canvas id="hubPerfCanvas" class="chart-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Row 2: Top Operator | Claims by Name -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">&#127942; Top Operator Performance</div>
           <div class="chart-controls">
-            <label>Group:
-              <select id="topGroupCol1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')"></select>
-            </label>
-            <label>Value:
-              <select id="topValCol1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')"></select>
-            </label>
-            <label>Agg:
-              <select id="topAgg1" onchange="renderTopByChart('topGroupCol1','topValCol1','topAgg1','topCanvas1')">
-                <option value="sum" selected>SUM</option>
-                <option value="count">COUNT</option>
-                <option value="avg">AVG</option>
+            <label>Show top
+              <select id="topOpLimit" onchange="renderTopOperatorChart()">
+                <option value="8" selected>8</option>
+                <option value="12">12</option>
+                <option value="20">20</option>
               </select>
             </label>
           </div>
-          <canvas id="topCanvas1" class="chart-canvas"></canvas>
+          <canvas id="topOpCanvas" class="chart-canvas"></canvas>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Top by Count</div>
+          <div class="chart-title">&#128203; Claims by Premise Type</div>
           <div class="chart-controls">
-            <label>Group:
-              <select id="topGroupCol2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')"></select>
-            </label>
-            <label>Value:
-              <select id="topValCol2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')"></select>
-            </label>
-            <label>Agg:
-              <select id="topAgg2" onchange="renderTopByChart('topGroupCol2','topValCol2','topAgg2','topCanvas2')">
-                <option value="count" selected>COUNT</option>
-                <option value="sum">SUM</option>
-                <option value="avg">AVG</option>
+            <label>Show top
+              <select id="topClaimLimit" onchange="renderClaimsByPremise()">
+                <option value="8" selected>8</option>
+                <option value="12">12</option>
+                <option value="20">20</option>
               </select>
             </label>
           </div>
-          <canvas id="topCanvas2" class="chart-canvas"></canvas>
+          <canvas id="claimsPremiseCanvas" class="chart-canvas"></canvas>
         </div>
       </div>
 
-      <!-- Row 3: timeline line chart -->
+      <!-- Row 3: Recent Claims Records -->
       <div class="card">
-        <div class="chart-title">Records Over Time</div>
-        <div class="chart-controls">
-          <label>Date column:
-            <select id="timelineDateCol" onchange="renderTimelineChart()"></select>
-          </label>
-          <label>Granularity:
-            <select id="timelineGranularity" onchange="renderTimelineChart()">
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month" selected>Month</option>
-            </select>
-          </label>
+        <div class="section-header">
+          <div class="chart-title" style="margin:0">&#128203; Recent Claims Records</div>
+          <div style="font-size:.78rem;color:var(--text-muted)" id="recentClaimsCount"></div>
         </div>
-        <canvas id="timelineCanvas" class="chart-canvas chart-canvas-wide"></canvas>
+        <div id="recentClaimsTable" class="recent-claims-table" style="margin-top:.85rem;overflow-x:auto"></div>
       </div>
 
-      <!-- Row 4: status distribution table -->
-      <div class="card">
-        <div class="chart-title">Column Value Distribution Table</div>
-        <div class="chart-controls">
-          <label>Column:
-            <select id="statusDistCol" onchange="renderStatusTable()"></select>
-          </label>
-          <label>Limit:
-            <select id="statusDistLimit" onchange="renderStatusTable()">
-              <option value="10">10</option>
-              <option value="20" selected>20</option>
-              <option value="30">30</option>
-            </select>
-          </label>
-        </div>
-        <div id="statusDistTable" class="table-wrap"></div>
+      <!-- Generic chart controls (hidden but needed by legacy functions) -->
+      <div style="display:none">
+        <select id="distCol1"></select><select id="distCol2"></select>
+        <select id="topGroupCol1"></select><select id="topValCol1"></select><select id="topAgg1"></select>
+        <select id="topGroupCol2"></select><select id="topValCol2"></select><select id="topAgg2"></select>
+        <select id="timelineDateCol"></select><select id="timelineGranularity"></select>
+        <select id="statusDistCol"></select><select id="statusDistLimit"></select>
+        <canvas id="distCanvas1" class="chart-canvas"></canvas><div id="distLegend1"></div>
+        <canvas id="distCanvas2" class="chart-canvas"></canvas><div id="distLegend2"></div>
+        <canvas id="topCanvas1" class="chart-canvas"></canvas>
+        <canvas id="topCanvas2" class="chart-canvas"></canvas>
+        <canvas id="timelineCanvas" class="chart-canvas"></canvas>
+        <div id="statusDistTable"></div>
+        <div id="metricCards"></div>
       </div>
+
     </div>
   </section>
 

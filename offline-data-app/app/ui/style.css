@@ -1,20 +1,20 @@
 /* ===================================================================
-   SOC Data Processor — Enterprise UI
-   Modern, clean design with subtle animations and depth
+   Claims Dashboard — Lost in Premise
+   Green enterprise UI
    =================================================================== */
 
 /* --- CSS Variables --- */
 :root {
-  /* Brand */
-  --brand-50:    #eef2ff;
-  --brand-100:   #e0e7ff;
-  --brand-200:   #c7d2fe;
-  --brand-400:   #818cf8;
-  --brand-500:   #6366f1;
-  --brand-600:   #4f46e5;
-  --brand-700:   #4338ca;
-  --brand-800:   #3730a3;
-  --brand-900:   #312e81;
+  /* Brand — Emerald Green */
+  --brand-50:    #ecfdf5;
+  --brand-100:   #d1fae5;
+  --brand-200:   #a7f3d0;
+  --brand-400:   #34d399;
+  --brand-500:   #10b981;
+  --brand-600:   #059669;
+  --brand-700:   #047857;
+  --brand-800:   #065f46;
+  --brand-900:   #064e3b;
 
   /* Neutrals */
   --gray-25:     #fcfcfd;
@@ -65,7 +65,7 @@
   --shadow:      0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
   --shadow-md:   0 8px 16px -4px rgba(0,0,0,.08), 0 4px 6px -2px rgba(0,0,0,.04);
   --shadow-lg:   0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.08);
-  --shadow-glow: 0 0 20px rgba(99,102,241,.15);
+  --shadow-glow: 0 0 20px rgba(16,185,129,.15);
   --transition:  all 0.2s cubic-bezier(.4,0,.2,1);
   --transition-fast: all 0.12s cubic-bezier(.4,0,.2,1);
 }
@@ -139,7 +139,7 @@ body {
   background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
   border-radius: var(--radius-sm);
   font-size: 1rem;
-  box-shadow: 0 2px 8px rgba(99,102,241,.4);
+  box-shadow: 0 2px 8px rgba(16,185,129,.4);
 }
 
 #headerStatus {
@@ -382,7 +382,7 @@ body {
 .chart-controls select:focus {
   outline: none;
   border-color: var(--brand-400);
-  box-shadow: 0 0 0 3px rgba(99,102,241,.1);
+  box-shadow: 0 0 0 3px rgba(16,185,129,.1);
 }
 
 .chart-title {
@@ -456,16 +456,16 @@ canvas.chart-canvas { display: block; width: 100%; }
 .btn-primary {
   background: var(--brand-600);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(79,70,229,.3), inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow: 0 1px 3px rgba(5,150,105,.3), inset 0 1px 0 rgba(255,255,255,.1);
 }
 .btn-primary:hover {
   background: var(--brand-700);
-  box-shadow: 0 4px 12px rgba(79,70,229,.35), inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow: 0 4px 12px rgba(5,150,105,.35), inset 0 1px 0 rgba(255,255,255,.1);
   transform: translateY(-1px);
 }
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 1px 3px rgba(79,70,229,.3);
+  box-shadow: 0 1px 3px rgba(5,150,105,.3);
 }
 
 .btn-secondary {
@@ -543,7 +543,7 @@ canvas.chart-canvas { display: block; width: 100%; }
 .form-control:focus {
   outline: none;
   border-color: var(--brand-400);
-  box-shadow: 0 0 0 4px rgba(99,102,241,.1), var(--shadow-xs);
+  box-shadow: 0 0 0 4px rgba(16,185,129,.1), var(--shadow-xs);
 }
 
 .form-control::placeholder { color: var(--gray-400); }
@@ -653,7 +653,7 @@ canvas.chart-canvas { display: block; width: 100%; }
 
 .drop-zone:hover::before,
 .drop-zone.drag-over::before {
-  background: linear-gradient(135deg, rgba(99,102,241,.03), rgba(99,102,241,.07));
+  background: linear-gradient(135deg, rgba(16,185,129,.03), rgba(16,185,129,.07));
 }
 
 .drop-zone p { color: var(--text-secondary); margin: .5rem 0; }
@@ -954,7 +954,7 @@ tr:hover td { background: var(--brand-50); }
   font-weight: 600;
   z-index: 101;
   animation: bannerSlide 0.4s cubic-bezier(.4,0,.2,1);
-  box-shadow: 0 2px 8px rgba(79,70,229,.3);
+  box-shadow: 0 2px 8px rgba(5,150,105,.3);
 }
 
 @keyframes bannerSlide {
@@ -1181,6 +1181,200 @@ input:focus:not(:focus-visible),
 select:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* ===================================================================
+   CLAIMS DASHBOARD — Filter bar & enhanced cards
+   =================================================================== */
+.dash-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: .85rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.dash-filter-bar label {
+  font-size: .74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+.dash-filter-bar select {
+  font-size: .82rem;
+  padding: .35rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.dash-filter-bar select:focus {
+  outline: none;
+  border-color: var(--brand-400);
+  box-shadow: 0 0 0 3px rgba(16,185,129,.1);
+}
+
+.dash-filter-spacer { flex: 1; }
+
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.dash-header h2 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--gray-900);
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dash-header h2 span.dash-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  display: inline-block;
+  box-shadow: 0 0 6px var(--brand-400);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+.dash-subtitle {
+  font-size: .78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: .15rem;
+}
+
+.kpi-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1200px) { .kpi-grid-6 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px)  { .kpi-grid-6 { grid-template-columns: repeat(2, 1fr); } }
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1rem;
+  text-align: left;
+  box-shadow: var(--shadow-xs);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.kpi-card-green::after  { background: linear-gradient(90deg, var(--brand-500), var(--brand-400)); }
+.kpi-card-blue::after   { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.kpi-card-amber::after  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.kpi-card-purple::after { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.kpi-card-rose::after   { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+.kpi-card-teal::after   { background: linear-gradient(90deg, #14b8a6, #2dd4bf); }
+
+.kpi-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  border-color: var(--border);
+}
+
+.kpi-icon {
+  font-size: 1.5rem;
+  margin-bottom: .5rem;
+  display: block;
+}
+
+.kpi-value {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--gray-900);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: .25rem;
+}
+
+.kpi-label {
+  font-size: .68rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.recent-claims-table table {
+  width: 100%;
+  font-size: .82rem;
+}
+
+.recent-claims-table table th {
+  background: var(--gray-50);
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: .65rem .85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.recent-claims-table table td {
+  padding: .6rem .85rem;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--gray-700);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-claims-table table tr:hover td { background: var(--gray-25); }
+
+.cogs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .18rem .55rem;
+  border-radius: 999px;
+  font-size: .73rem;
+  font-weight: 700;
+}
+
+.cogs-high   { background: #fef2f2; color: #dc2626; }
+.cogs-mid    { background: #fffbeb; color: #d97706; }
+.cogs-low    { background: #ecfdf5; color: #059669; }
 
 /* ===================================================================
    RESPONSIVE

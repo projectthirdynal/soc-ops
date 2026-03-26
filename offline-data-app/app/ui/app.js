@@ -17,22 +17,22 @@ const state = {
   splitFile: null,     // file selected for standalone split
 };
 
-// SOC-specific column suggestions
+// Claims-specific column suggestions (new format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB)
 const SOC_DEFAULTS = {
-  personKey:    'operator',
-  numericCols:  ['cogs_local', 'cogs_share_local', 'station_activity_total_ops', 'agency_ops_count'],
-  dateCols:     ['lost_status_time'],
-  catCols:      ['lost_status', 'station_reference', 'activity_type', 'type_of_lost'],
-  orderCol:     'tracking_number',
-  distCol1:     'type_of_lost',
-  distCol2:     'activity_type',
-  topGroupCol1: 'station_reference',
-  topValCol1:   'cogs_local',
-  topGroupCol2: 'operator',
-  topValCol2:   'tracking_number',
-  timelineDate: 'lost_status_time',
-  statusCol:    'lost_status',
-  clusterFeats: ['cogs_local', 'cogs_share_local', 'station_activity_total_ops', 'agency_ops_count'],
+  personKey:    'NAME',
+  numericCols:  ['cogs_share_local'],
+  dateCols:     [],
+  catCols:      ['CLAIMS NAME', 'HUB', 'TRACK'],
+  orderCol:     'TRACK',
+  distCol1:     'HUB',
+  distCol2:     'CLAIMS NAME',
+  topGroupCol1: 'HUB',
+  topValCol1:   'cogs_share_local',
+  topGroupCol2: 'NAME',
+  topValCol2:   'TRACK',
+  timelineDate: null,
+  statusCol:    'HUB',
+  clusterFeats: ['cogs_share_local'],
 };
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
  * @param {string[]} labels
  * @param {number[]} values
  */
-function drawPieChart(canvas, labels, values) {
+function drawPieChart(canvas, labels, values, palette) {
+  const pal = palette || PALETTE;
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
@@ -149,7 +150,7 @@ function drawPieChart(canvas, labels, values) {
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, start, start + slice);
     ctx.closePath();
-    ctx.fillStyle = PALETTE[i % PALETTE.length];
+    ctx.fillStyle = pal[i % pal.length];
     ctx.fill();
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
@@ -172,6 +173,7 @@ function drawPieChart(canvas, labels, values) {
  * @param {object} opts — {title, formatValue}
  */
 function drawHBarChart(canvas, labels, values, opts = {}) {
+  const pal = opts.palette || PALETTE;
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
@@ -204,7 +206,7 @@ function drawHBarChart(canvas, labels, values, opts = {}) {
     ctx.fillText(displayLbl, pad.left + labelMaxLen - 6, y + barH / 2 + 4);
 
     // Bar
-    ctx.fillStyle = PALETTE[i % PALETTE.length];
+    ctx.fillStyle = pal[i % pal.length];
     ctx.beginPath();
     ctx.roundRect
       ? ctx.roundRect(barAreaX, y, barW, barH, 3)
@@ -312,6 +314,9 @@ function drawLineChart(canvas, labels, values) {
 // =====================================================  DASHBOARD LOGIC  ===
 // ---------------------------------------------------------------------------
 
+// Active hub filter for dashboard
+let _dashHubFilter = '';
+
 async function loadDashboard() {
   try {
     const summary = await apiFetch('/api/dashboard/summary');
@@ -330,172 +335,216 @@ async function loadDashboard() {
     noData.style.display = 'none';
     content.style.display = 'block';
 
+    const isClaims = summary.detected_type === 'soc';
     document.getElementById('headerStatus').textContent =
-      `${summary.row_count.toLocaleString()} rows · ${summary.col_count} columns · ${summary.detected_type === 'soc' ? 'SOC format detected' : 'Generic format'}`;
+      `${summary.row_count.toLocaleString()} rows · ${summary.col_count} cols · ${isClaims ? 'Claims format' : 'Generic'}`;
 
-    await loadMetricCards();
-    populateDashboardControls(summary);
+    const now = new Date();
+    document.getElementById('dashSubtitle').textContent =
+      `Last updated ${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
 
-    // Render charts with defaults
+    // Populate hub filter
+    await populateHubFilter(summary);
+
+    resizeAllCanvases();
+
     await Promise.allSettled([
-      renderDistChart('distCol1', 'distCanvas1', 'distLegend1'),
-      renderDistChart('distCol2', 'distCanvas2', 'distLegend2'),
-      renderTopByChart('topGroupCol1', 'topValCol1', 'topAgg1', 'topCanvas1'),
-      renderTopByChart('topGroupCol2', 'topValCol2', 'topAgg2', 'topCanvas2'),
-      renderTimelineChart(),
-      renderStatusTable(),
+      loadKpiCards(),
+      renderCogsDistribution(),
+      renderHubPerformance(),
+      renderTopOperatorChart(),
+      renderClaimsByPremise(),
+      renderRecentClaims(),
     ]);
   } catch (e) {
     showToast(`Dashboard error: ${e.message}`, 'error');
   }
 }
 
-async function loadMetricCards() {
+async function populateHubFilter(summary) {
+  const sel = document.getElementById('filterHub');
+  if (!sel) return;
+  const cols = summary.columns || [];
+  if (!cols.includes('HUB')) return;
   try {
-    const cards = await apiFetch('/api/dashboard/metrics');
-    const el = document.getElementById('metricCards');
-    el.innerHTML = cards.map(c => `
-      <div class="metric-card">
-        <div class="metric-icon">${escapeHtml(c.icon)}</div>
-        <div class="metric-value">${escapeHtml(c.value)}</div>
-        <div class="metric-label">${escapeHtml(c.label)}</div>
-      </div>
-    `).join('');
+    const data = await apiFetch('/api/dashboard/distribution?column=HUB&limit=50');
+    sel.innerHTML = '<option value="">All Hubs</option>' +
+      data.map(d => `<option value="${escapeHtml(d.label)}">${escapeHtml(d.label)} (${d.count.toLocaleString()})</option>`).join('');
+    sel.value = _dashHubFilter;
   } catch (e) {
-    console.warn('metric cards error', e);
+    console.warn('hub filter error', e);
   }
 }
 
-function populateDashboardControls(summary) {
-  const strCols = summary.string_cols;
-  const numCols = summary.numeric_cols;
-  const dtCols  = summary.datetime_cols;
-  const allCols = summary.columns;
-
-  const isSOC = summary.detected_type === 'soc';
-
-  // Distribution col pickers
-  populateSelect('distCol1', strCols, isSOC && strCols.includes(SOC_DEFAULTS.distCol1) ? SOC_DEFAULTS.distCol1 : strCols[0]);
-  populateSelect('distCol2', strCols, isSOC && strCols.includes(SOC_DEFAULTS.distCol2) ? SOC_DEFAULTS.distCol2 : strCols[1] || strCols[0]);
-
-  // Top-by col pickers
-  populateSelect('topGroupCol1', strCols, isSOC && strCols.includes(SOC_DEFAULTS.topGroupCol1) ? SOC_DEFAULTS.topGroupCol1 : strCols[0]);
-  populateSelect('topValCol1',   numCols, isSOC && numCols.includes(SOC_DEFAULTS.topValCol1)   ? SOC_DEFAULTS.topValCol1   : numCols[0]);
-  populateSelect('topGroupCol2', strCols, isSOC && strCols.includes(SOC_DEFAULTS.topGroupCol2) ? SOC_DEFAULTS.topGroupCol2 : strCols[0]);
-  populateSelect('topValCol2',   allCols, isSOC && allCols.includes(SOC_DEFAULTS.topValCol2)   ? SOC_DEFAULTS.topValCol2   : allCols[0]);
-
-  // Timeline date col
-  const dateOptions = [...dtCols, ...strCols.filter(c => c.includes('date') || c.includes('time') || c.includes('at'))];
-  populateSelect('timelineDateCol', dateOptions.length ? dateOptions : allCols,
-    isSOC && dtCols.includes(SOC_DEFAULTS.timelineDate) ? SOC_DEFAULTS.timelineDate : (dateOptions[0] || allCols[0]));
-
-  // Status distribution col
-  populateSelect('statusDistCol', strCols, isSOC && strCols.includes(SOC_DEFAULTS.statusCol) ? SOC_DEFAULTS.statusCol : strCols[0]);
+function applyDashboardFilter() {
+  _dashHubFilter = document.getElementById('filterHub')?.value || '';
+  const statusEl = document.getElementById('dashFilterStatus');
+  if (statusEl) statusEl.textContent = _dashHubFilter ? `Filtered: ${_dashHubFilter}` : '';
+  Promise.allSettled([
+    loadKpiCards(),
+    renderCogsDistribution(),
+    renderHubPerformance(),
+    renderTopOperatorChart(),
+    renderClaimsByPremise(),
+    renderRecentClaims(),
+  ]);
 }
 
-async function renderDistChart(selectId, canvasId, legendId) {
-  const col = document.getElementById(selectId)?.value;
-  if (!col) return;
-  try {
-    const data = await apiFetch(`/api/dashboard/distribution?column=${encodeURIComponent(col)}&limit=10`);
-    const canvas = document.getElementById(canvasId);
-    const legend = document.getElementById(legendId);
-    if (!canvas) return;
+const KPI_COLORS = ['kpi-card-green','kpi-card-blue','kpi-card-amber','kpi-card-purple','kpi-card-rose','kpi-card-teal'];
 
+async function loadKpiCards() {
+  try {
+    const cards = await apiFetch('/api/dashboard/metrics');
+    const grid = document.getElementById('kpiGrid');
+    if (!grid) return;
+    grid.innerHTML = cards.map((c, i) => `
+      <div class="kpi-card ${KPI_COLORS[i % KPI_COLORS.length]}">
+        <span class="kpi-icon">${escapeHtml(c.icon)}</span>
+        <div class="kpi-value">${escapeHtml(c.value)}</div>
+        <div class="kpi-label">${escapeHtml(c.label)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.warn('kpi cards error', e);
+  }
+}
+
+// Green palette for Claims dashboard charts
+const GREEN_PALETTE = [
+  '#10b981','#34d399','#6ee7b7','#a7f3d0','#d1fae5',
+  '#059669','#047857','#065f46','#14b8a6','#2dd4bf',
+  '#0ea5e9','#38bdf8','#7dd3fc','#93c5fd','#6366f1',
+];
+
+async function renderCogsDistribution() {
+  const canvas = document.getElementById('cogsDistCanvas');
+  const legend = document.getElementById('cogsDistLegend');
+  if (!canvas) return;
+  try {
+    const data = await apiFetch('/api/dashboard/cogs-distribution');
+    if (!data.length) { return; }
     const labels = data.map(d => d.label);
     const values = data.map(d => d.count);
-    drawPieChart(canvas, labels, values);
-
+    drawPieChart(canvas, labels, values, GREEN_PALETTE);
     if (legend) {
       legend.innerHTML = data.map((d, i) => `
         <span class="legend-item">
-          <span class="legend-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
-          ${escapeHtml(d.label)} (${escapeHtml(d.pct)}%)
+          <span class="legend-dot" style="background:${GREEN_PALETTE[i % GREEN_PALETTE.length]}"></span>
+          ${escapeHtml(d.label)}: ${d.count.toLocaleString()} (${d.pct}%)
         </span>
       `).join('');
     }
   } catch (e) {
-    console.warn('dist chart error', e);
+    console.warn('cogs distribution error', e);
   }
 }
 
-async function renderTopByChart(groupSelId, valSelId, aggSelId, canvasId) {
-  const groupCol = document.getElementById(groupSelId)?.value;
-  const valCol   = document.getElementById(valSelId)?.value;
-  const agg      = document.getElementById(aggSelId)?.value || 'sum';
-  if (!groupCol || !valCol) return;
+async function renderHubPerformance() {
+  const canvas = document.getElementById('hubPerfCanvas');
+  if (!canvas) return;
+  try {
+    const data = await apiFetch('/api/dashboard/hub-performance?limit=10');
+    if (!data.length) return;
+    const labels = data.map(d => d.hub);
+    const claimsVals = data.map(d => d.claims);
+    drawHBarChart(canvas, labels, claimsVals, { palette: GREEN_PALETTE });
+  } catch (e) {
+    console.warn('hub performance error', e);
+  }
+}
 
+async function renderTopOperatorChart() {
+  const canvas = document.getElementById('topOpCanvas');
+  const limit  = parseInt(document.getElementById('topOpLimit')?.value || '8', 10);
+  if (!canvas || !state.summary?.columns?.includes('NAME')) return;
   try {
     const data = await apiFetch(
-      `/api/dashboard/top-by?group_col=${encodeURIComponent(groupCol)}&value_col=${encodeURIComponent(valCol)}&agg=${agg}&limit=10`
+      `/api/dashboard/top-by?group_col=NAME&value_col=NAME&agg=count&limit=${limit}`
     );
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-
     const labels = data.map(d => d.label);
     const values = data.map(d => d.value);
-    drawHBarChart(canvas, labels, values);
+    drawHBarChart(canvas, labels, values, { palette: GREEN_PALETTE });
   } catch (e) {
-    console.warn('top-by chart error', e);
+    console.warn('top operator error', e);
   }
 }
 
-async function renderTimelineChart() {
-  const dateCol     = document.getElementById('timelineDateCol')?.value;
-  const granularity = document.getElementById('timelineGranularity')?.value || 'month';
-  if (!dateCol) return;
-
+async function renderClaimsByPremise() {
+  const canvas = document.getElementById('claimsPremiseCanvas');
+  const limit  = parseInt(document.getElementById('topClaimLimit')?.value || '8', 10);
+  if (!canvas || !state.summary?.columns?.includes('CLAIMS NAME')) return;
   try {
+    const col = encodeURIComponent('CLAIMS NAME');
     const data = await apiFetch(
-      `/api/dashboard/timeline?date_col=${encodeURIComponent(dateCol)}&agg=count&granularity=${granularity}`
+      `/api/dashboard/top-by?group_col=${col}&value_col=${col}&agg=count&limit=${limit}`
     );
-    const canvas = document.getElementById('timelineCanvas');
-    if (!canvas) return;
-
-    const labels = data.map(d => d.date);
+    const labels = data.map(d => d.label);
     const values = data.map(d => d.value);
-    drawLineChart(canvas, labels, values);
+    drawHBarChart(canvas, labels, values, { palette: GREEN_PALETTE });
   } catch (e) {
-    console.warn('timeline chart error', e);
+    console.warn('claims by premise error', e);
   }
 }
 
-async function renderStatusTable() {
-  const col   = document.getElementById('statusDistCol')?.value;
-  const limit = document.getElementById('statusDistLimit')?.value || 20;
-  if (!col) return;
-
+async function renderRecentClaims() {
+  const el = document.getElementById('recentClaimsTable');
+  const countEl = document.getElementById('recentClaimsCount');
+  if (!el) return;
   try {
-    const data = await apiFetch(
-      `/api/dashboard/distribution?column=${encodeURIComponent(col)}&limit=${limit}`
-    );
-    const el = document.getElementById('statusDistTable');
-    if (!el) return;
+    const rows = await apiFetch('/api/dashboard/recent-claims?limit=20');
+    if (!rows.length) { el.innerHTML = '<p class="muted">No data.</p>'; return; }
 
-    if (!data.length) { el.innerHTML = '<p class="muted">No data.</p>'; return; }
+    const keys = Object.keys(rows[0]);
+    const thead = `<tr>${keys.map(k => `<th>${escapeHtml(k)}</th>`).join('')}</tr>`;
 
-    const rows = data.map((d, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${escapeHtml(d.label)}</td>
-        <td>${escapeHtml(d.count.toLocaleString())}</td>
-        <td>
-          <div style="display:flex;align-items:center;gap:.5rem">
-            <div style="width:${Math.round(d.pct * 2)}px;height:10px;background:${PALETTE[i % PALETTE.length]};border-radius:3px"></div>
-            ${escapeHtml(d.pct)}%
-          </div>
-        </td>
-      </tr>
-    `).join('');
+    const tbody = rows.map(row => {
+      const cogs = parseFloat(row['cogs_share_local']);
+      return `<tr>${keys.map(k => {
+        const val = row[k] ?? '';
+        if (k === 'cogs_share_local' && !isNaN(cogs)) {
+          const cls = cogs >= 0.8 ? 'cogs-high' : cogs >= 0.4 ? 'cogs-mid' : 'cogs-low';
+          return `<td><span class="cogs-badge ${cls}">${escapeHtml(String(val))}</span></td>`;
+        }
+        return `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+      }).join('')}</tr>`;
+    }).join('');
 
-    el.innerHTML = `<table>
-      <thead><tr><th>#</th><th>Value</th><th>Count</th><th>Share</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    el.innerHTML = `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+    if (countEl) countEl.textContent = `${rows.length} records`;
   } catch (e) {
-    console.warn('status table error', e);
+    console.warn('recent claims error', e);
   }
 }
+
+async function exportDashboard() {
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: '', columns: [], page: 1, page_size: 100000 }),
+    });
+    if (!res.ok) throw new Error('Export failed');
+    const data = await res.json();
+    if (!data.rows.length) { showToast('No data to export.', 'error'); return; }
+    const keys = Object.keys(data.rows[0]);
+    const csv  = [keys.join(','), ...data.rows.map(r => keys.map(k => {
+      const v = String(r[k] ?? '');
+      return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v;
+    }).join(','))].join('\n');
+    triggerDownload(new Blob([csv], { type: 'text/csv' }), 'claims_export.csv');
+    showToast('Export complete.', 'success');
+  } catch (e) {
+    showToast(`Export error: ${e.message}`, 'error');
+  }
+}
+
+// Legacy stubs so existing references don't break
+function populateDashboardControls() {}
+async function renderDistChart() {}
+async function renderTopByChart() {}
+async function renderTimelineChart() {}
+async function renderStatusTable() {}
+async function loadMetricCards() { return loadKpiCards(); }
 
 // ---------------------------------------------------------------------------
 // =========================================================  UPLOAD  =======

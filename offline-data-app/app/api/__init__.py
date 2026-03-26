@@ -20,7 +20,15 @@ from app.api.ops_lock import acquire_operation, release_operation
 __all__ = ["create_app", "acquire_operation", "release_operation"]
 
 # Paths that should not be logged to avoid noise
-_QUIET_PATHS = frozenset({"/api/health", "/api/split/progress", "/api/split/file/progress"})
+_QUIET_PATHS = frozenset({
+    "/api/health",
+    "/api/split/progress",
+    "/api/split/file/progress",
+    "/api/dashboard/metrics",
+    "/api/dashboard/cogs-distribution",
+    "/api/dashboard/hub-performance",
+    "/api/dashboard/recent-claims",
+})
 
 
 def create_app() -> FastAPI:

@@ -156,8 +156,8 @@ async def get_summary() -> dict[str, Any]:
     row_count: int = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
     numeric, datetimes, strings = _classify_cols(info)
 
-    # Detect SOC-specific schema
-    soc_markers = {"tracking_number", "lost_status", "cogs_local", "type_of_lost"}
+    # Detect Claims-specific schema (new format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB)
+    soc_markers = {"CLAIMS NAME", "TRACK", "HUB", "NAME", "cogs_share_local"}
     detected = "soc" if soc_markers.issubset(info.keys()) else "generic"
 
     elapsed = time.perf_counter() - t0
@@ -190,52 +190,77 @@ async def get_metrics() -> list[dict[str, Any]]:
 
     try:
         total: int = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
-        cards.append({"label": "Total Records", "value": f"{total:,}", "icon": "📦"})
+        cards.append({"label": "Total Claims", "value": f"{total:,}", "icon": "📋"})
 
-        if "tracking_number" in cols:
+        # New Claims format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB
+        if "CLAIMS NAME" in cols:
             n: int = db.execute(
-                "SELECT COUNT(DISTINCT tracking_number) FROM raw_data"
+                'SELECT COUNT(DISTINCT "CLAIMS NAME") FROM raw_data'
             ).fetchone()[0]
-            cards.append({"label": "Unique Parcels", "value": f"{n:,}", "icon": "🔍"})
+            cards.append({"label": "Total Premises", "value": f"{n:,}", "icon": "🏠"})
 
-        if "operator" in cols:
-            n = db.execute(
-                "SELECT COUNT(DISTINCT operator) FROM raw_data"
-            ).fetchone()[0]
-            cards.append({"label": "Unique Operators", "value": f"{n:,}", "icon": "👤"})
-
-        if "station_reference" in cols:
-            n = db.execute(
-                "SELECT COUNT(DISTINCT station_reference) FROM raw_data"
-            ).fetchone()[0]
-            cards.append({"label": "Stations", "value": f"{n:,}", "icon": "🏭"})
-
-        if "cogs_local" in cols:
-            val = db.execute("SELECT SUM(cogs_local) FROM raw_data").fetchone()[0] or 0
+        if "cogs_share_local" in cols:
+            avg_val = db.execute(
+                "SELECT AVG(CAST(cogs_share_local AS DOUBLE)) FROM raw_data"
+            ).fetchone()[0] or 0.0
             cards.append({
-                "label": "Total COGS (Local)",
-                "value": f"\u20b1{val:,.0f}",
-                "icon": "💰",
+                "label": "Avg COGS Share",
+                "value": f"{avg_val:.3f}",
+                "icon": "📊",
             })
+
+        if "HUB" in cols:
+            n = db.execute(
+                'SELECT COUNT(DISTINCT "HUB") FROM raw_data'
+            ).fetchone()[0]
+            cards.append({"label": "Active Hubs", "value": f"{n:,}", "icon": "🏭"})
+
+        if "NAME" in cols:
+            n = db.execute(
+                'SELECT COUNT(DISTINCT "NAME") FROM raw_data'
+            ).fetchone()[0]
+            cards.append({"label": "Total Operators", "value": f"{n:,}", "icon": "👤"})
 
         if "cogs_share_local" in cols:
             val = db.execute(
-                "SELECT SUM(cogs_share_local) FROM raw_data"
-            ).fetchone()[0] or 0
+                "SELECT SUM(CAST(cogs_share_local AS DOUBLE)) FROM raw_data"
+            ).fetchone()[0] or 0.0
             cards.append({
-                "label": "Total COGS Share",
-                "value": f"\u20b1{val:,.2f}",
+                "label": "Lost Item Value",
+                "value": f"{val:,.2f}",
                 "icon": "💸",
             })
 
-        if "type_of_lost" in cols:
-            rows = db.execute(
-                "SELECT type_of_lost, COUNT(*) FROM raw_data "
-                "WHERE type_of_lost IS NOT NULL "
-                "GROUP BY type_of_lost ORDER BY 2 DESC"
-            ).fetchall()
-            for t, c in rows:
-                cards.append({"label": f"Lost Type: {t}", "value": f"{c:,}", "icon": "⚠️"})
+        # Legacy / generic fallbacks
+        if "CLAIMS NAME" not in cols:
+            if "tracking_number" in cols:
+                n = db.execute(
+                    "SELECT COUNT(DISTINCT tracking_number) FROM raw_data"
+                ).fetchone()[0]
+                cards.append({"label": "Unique Parcels", "value": f"{n:,}", "icon": "🔍"})
+
+            if "operator" in cols:
+                n = db.execute(
+                    "SELECT COUNT(DISTINCT operator) FROM raw_data"
+                ).fetchone()[0]
+                cards.append({"label": "Unique Operators", "value": f"{n:,}", "icon": "👤"})
+
+            if "cogs_local" in cols:
+                cogs_val = db.execute("SELECT SUM(cogs_local) FROM raw_data").fetchone()[0] or 0
+                cards.append({
+                    "label": "Total COGS (Local)",
+                    "value": f"\u20b1{cogs_val:,.0f}",
+                    "icon": "💰",
+                })
+
+            if "type_of_lost" in cols:
+                lrows = db.execute(
+                    "SELECT type_of_lost, COUNT(*) FROM raw_data "
+                    "WHERE type_of_lost IS NOT NULL "
+                    "GROUP BY type_of_lost ORDER BY 2 DESC"
+                ).fetchall()
+                for t, c in lrows:
+                    cards.append({"label": f"Lost Type: {t}", "value": f"{c:,}", "icon": "⚠️"})
 
         elapsed = time.perf_counter() - t0
         if elapsed > _SLOW_QUERY_THRESHOLD:
@@ -398,4 +423,109 @@ async def get_timeline(
         return result
     except Exception as exc:
         logger.exception("timeline error")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/dashboard/cogs-distribution", response_model=list[DistributionItem])
+async def get_cogs_distribution() -> list[dict[str, Any]]:
+    """Return binned distribution of cogs_share_local into 0.2-width buckets."""
+    t0 = time.perf_counter()
+    db = get_db()
+    info = _col_info(db)
+    if not info or "cogs_share_local" not in info:
+        return []
+
+    try:
+        total: int = db.execute("SELECT COUNT(*) FROM raw_data WHERE cogs_share_local IS NOT NULL").fetchone()[0]
+        if total == 0:
+            return []
+
+        bins = [
+            ("0.0–0.2", 0.0, 0.2),
+            ("0.2–0.4", 0.2, 0.4),
+            ("0.4–0.6", 0.4, 0.6),
+            ("0.6–0.8", 0.6, 0.8),
+            ("0.8–1.0", 0.8, 1.0),
+        ]
+        result = []
+        for label, lo, hi in bins:
+            cnt: int = db.execute(
+                "SELECT COUNT(*) FROM raw_data "
+                "WHERE CAST(cogs_share_local AS DOUBLE) >= ? AND CAST(cogs_share_local AS DOUBLE) < ?",
+                [lo, hi],
+            ).fetchone()[0]
+            result.append({
+                "label": label,
+                "count": cnt,
+                "pct": round(cnt / total * 100, 1) if total else 0.0,
+            })
+
+        elapsed = time.perf_counter() - t0
+        if elapsed > _SLOW_QUERY_THRESHOLD:
+            logger.warning("Slow dashboard/cogs-distribution query: %.2fs", elapsed)
+        return result
+    except Exception as exc:
+        logger.exception("cogs-distribution error")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/dashboard/hub-performance")
+async def get_hub_performance(limit: int = Query(10, ge=1, le=30)) -> list[dict[str, Any]]:
+    """Return per-hub claims count and average COGS share."""
+    t0 = time.perf_counter()
+    db = get_db()
+    info = _col_info(db)
+    if not info or "HUB" not in info:
+        return []
+
+    try:
+        rows = db.execute(
+            f"""
+            SELECT
+                COALESCE(CAST("HUB" AS VARCHAR), '(null)') AS hub,
+                COUNT(*) AS claims,
+                AVG(CAST(cogs_share_local AS DOUBLE)) AS avg_cogs
+            FROM raw_data
+            GROUP BY "HUB"
+            ORDER BY claims DESC
+            LIMIT ?
+            """,
+            [limit],
+        ).fetchall()
+        result = [
+            {
+                "hub": r[0],
+                "claims": int(r[1]),
+                "avg_cogs": round(float(r[2]) if r[2] is not None else 0.0, 4),
+            }
+            for r in rows
+        ]
+        elapsed = time.perf_counter() - t0
+        if elapsed > _SLOW_QUERY_THRESHOLD:
+            logger.warning("Slow dashboard/hub-performance query: %.2fs", elapsed)
+        return result
+    except Exception as exc:
+        logger.exception("hub-performance error")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/dashboard/recent-claims")
+async def get_recent_claims(limit: int = Query(20, ge=1, le=100)) -> list[dict[str, Any]]:
+    """Return the most recent claim rows for the Recent Claims Records table."""
+    db = get_db()
+    info = _col_info(db)
+    if not info:
+        return []
+
+    # Use Claims-format columns when available, else fall back to all columns
+    claims_cols = [c for c in ["CLAIMS NAME", "TRACK", "cogs_share_local", "NAME", "HUB"] if c in info]
+    if not claims_cols:
+        claims_cols = list(info.keys())[:6]
+
+    quoted = ", ".join(f'"{c}"' for c in claims_cols)
+    try:
+        rows = db.execute(f"SELECT {quoted} FROM raw_data LIMIT ?", [limit]).fetchall()
+        return [dict(zip(claims_cols, r)) for r in rows]
+    except Exception as exc:
+        logger.exception("recent-claims error")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
