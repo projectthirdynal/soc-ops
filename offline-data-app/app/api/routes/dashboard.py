@@ -156,8 +156,9 @@ async def get_summary() -> dict[str, Any]:
     row_count: int = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
     numeric, datetimes, strings = _classify_cols(info)
 
-    # Detect Claims-specific schema (new format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB)
-    soc_markers = {"CLAIMS NAME", "TRACK", "HUB", "NAME", "cogs_share_local"}
+    # Detect Claims-specific schema (normalized column names after upload)
+    # CLAIMS NAME → claims_name, TRACKING NUMBER → tracking_number, NAME → name, HUB → hub
+    soc_markers = {"claims_name", "cogs_share_local", "name", "hub"}
     detected = "soc" if soc_markers.issubset(info.keys()) else "generic"
 
     elapsed = time.perf_counter() - t0
@@ -192,10 +193,10 @@ async def get_metrics() -> list[dict[str, Any]]:
         total: int = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()[0]
         cards.append({"label": "Total Claims", "value": f"{total:,}", "icon": "📋"})
 
-        # New Claims format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB
-        if "CLAIMS NAME" in cols:
+        # Claims format (normalized column names): claims_name, tracking_number, cogs_share_local, name, hub
+        if "claims_name" in cols:
             n: int = db.execute(
-                'SELECT COUNT(DISTINCT "CLAIMS NAME") FROM raw_data'
+                "SELECT COUNT(DISTINCT claims_name) FROM raw_data"
             ).fetchone()[0]
             cards.append({"label": "Total Premises", "value": f"{n:,}", "icon": "🏠"})
 
@@ -209,16 +210,12 @@ async def get_metrics() -> list[dict[str, Any]]:
                 "icon": "📊",
             })
 
-        if "HUB" in cols:
-            n = db.execute(
-                'SELECT COUNT(DISTINCT "HUB") FROM raw_data'
-            ).fetchone()[0]
+        if "hub" in cols:
+            n = db.execute("SELECT COUNT(DISTINCT hub) FROM raw_data").fetchone()[0]
             cards.append({"label": "Active Hubs", "value": f"{n:,}", "icon": "🏭"})
 
-        if "NAME" in cols:
-            n = db.execute(
-                'SELECT COUNT(DISTINCT "NAME") FROM raw_data'
-            ).fetchone()[0]
+        if "name" in cols:
+            n = db.execute("SELECT COUNT(DISTINCT name) FROM raw_data").fetchone()[0]
             cards.append({"label": "Total Operators", "value": f"{n:,}", "icon": "👤"})
 
         if "cogs_share_local" in cols:
@@ -232,7 +229,7 @@ async def get_metrics() -> list[dict[str, Any]]:
             })
 
         # Legacy / generic fallbacks
-        if "CLAIMS NAME" not in cols:
+        if "claims_name" not in cols:
             if "tracking_number" in cols:
                 n = db.execute(
                     "SELECT COUNT(DISTINCT tracking_number) FROM raw_data"
@@ -475,18 +472,18 @@ async def get_hub_performance(limit: int = Query(10, ge=1, le=30)) -> list[dict[
     t0 = time.perf_counter()
     db = get_db()
     info = _col_info(db)
-    if not info or "HUB" not in info:
+    if not info or "hub" not in info:
         return []
 
     try:
         rows = db.execute(
-            f"""
+            """
             SELECT
-                COALESCE(CAST("HUB" AS VARCHAR), '(null)') AS hub,
+                COALESCE(CAST(hub AS VARCHAR), '(null)') AS hub,
                 COUNT(*) AS claims,
                 AVG(CAST(cogs_share_local AS DOUBLE)) AS avg_cogs
             FROM raw_data
-            GROUP BY "HUB"
+            GROUP BY hub
             ORDER BY claims DESC
             LIMIT ?
             """,
@@ -517,8 +514,8 @@ async def get_recent_claims(limit: int = Query(20, ge=1, le=100)) -> list[dict[s
     if not info:
         return []
 
-    # Use Claims-format columns when available, else fall back to all columns
-    claims_cols = [c for c in ["CLAIMS NAME", "TRACK", "cogs_share_local", "NAME", "HUB"] if c in info]
+    # Use normalized Claims-format columns when available, else fall back to all columns
+    claims_cols = [c for c in ["claims_name", "tracking_number", "cogs_share_local", "name", "hub"] if c in info]
     if not claims_cols:
         claims_cols = list(info.keys())[:6]
 

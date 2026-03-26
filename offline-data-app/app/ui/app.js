@@ -17,21 +17,22 @@ const state = {
   splitFile: null,     // file selected for standalone split
 };
 
-// Claims-specific column suggestions (new format: CLAIMS NAME, TRACK, cogs_share_local, NAME, HUB)
+// Claims-specific column suggestions (normalized names after upload)
+// CLAIMS NAME → claims_name, TRACKING NUMBER → tracking_number, NAME → name, HUB → hub
 const SOC_DEFAULTS = {
-  personKey:    'NAME',
+  personKey:    'name',
   numericCols:  ['cogs_share_local'],
   dateCols:     [],
-  catCols:      ['CLAIMS NAME', 'HUB', 'TRACK'],
-  orderCol:     'TRACK',
-  distCol1:     'HUB',
-  distCol2:     'CLAIMS NAME',
-  topGroupCol1: 'HUB',
+  catCols:      ['claims_name', 'hub', 'tracking_number'],
+  orderCol:     'tracking_number',
+  distCol1:     'hub',
+  distCol2:     'claims_name',
+  topGroupCol1: 'hub',
   topValCol1:   'cogs_share_local',
-  topGroupCol2: 'NAME',
-  topValCol2:   'TRACK',
+  topGroupCol2: 'name',
+  topValCol2:   'tracking_number',
   timelineDate: null,
-  statusCol:    'HUB',
+  statusCol:    'hub',
   clusterFeats: ['cogs_share_local'],
 };
 
@@ -365,9 +366,9 @@ async function populateHubFilter(summary) {
   const sel = document.getElementById('filterHub');
   if (!sel) return;
   const cols = summary.columns || [];
-  if (!cols.includes('HUB')) return;
+  if (!cols.includes('hub')) return;
   try {
-    const data = await apiFetch('/api/dashboard/distribution?column=HUB&limit=50');
+    const data = await apiFetch('/api/dashboard/distribution?column=hub&limit=50');
     sel.innerHTML = '<option value="">All Hubs</option>' +
       data.map(d => `<option value="${escapeHtml(d.label)}">${escapeHtml(d.label)} (${d.count.toLocaleString()})</option>`).join('');
     sel.value = _dashHubFilter;
@@ -456,10 +457,10 @@ async function renderHubPerformance() {
 async function renderTopOperatorChart() {
   const canvas = document.getElementById('topOpCanvas');
   const limit  = parseInt(document.getElementById('topOpLimit')?.value || '8', 10);
-  if (!canvas || !state.summary?.columns?.includes('NAME')) return;
+  if (!canvas || !state.summary?.columns?.includes('name')) return;
   try {
     const data = await apiFetch(
-      `/api/dashboard/top-by?group_col=NAME&value_col=NAME&agg=count&limit=${limit}`
+      `/api/dashboard/top-by?group_col=name&value_col=name&agg=count&limit=${limit}`
     );
     const labels = data.map(d => d.label);
     const values = data.map(d => d.value);
@@ -472,9 +473,9 @@ async function renderTopOperatorChart() {
 async function renderClaimsByPremise() {
   const canvas = document.getElementById('claimsPremiseCanvas');
   const limit  = parseInt(document.getElementById('topClaimLimit')?.value || '8', 10);
-  if (!canvas || !state.summary?.columns?.includes('CLAIMS NAME')) return;
+  if (!canvas || !state.summary?.columns?.includes('claims_name')) return;
   try {
-    const col = encodeURIComponent('CLAIMS NAME');
+    const col = encodeURIComponent('claims_name');
     const data = await apiFetch(
       `/api/dashboard/top-by?group_col=${col}&value_col=${col}&agg=count&limit=${limit}`
     );

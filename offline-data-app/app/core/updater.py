@@ -16,24 +16,18 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import platform
 import re
-import shutil
 import subprocess
-import sys
-import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-from urllib.parse import urljoin
 
 from app.core.version import VERSION
 
 logger = logging.getLogger(__name__)
 
 # GitHub Releases asset name pattern
-_INSTALLER_PATTERN = re.compile(r"SOCDataProcessor-Setup.*\.exe$", re.IGNORECASE)
+_INSTALLER_PATTERN = re.compile(r"ASNClaimsProcessor-Setup.*\.exe$", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -228,20 +222,42 @@ def _is_http(source: str) -> bool:
 # Fetching from different sources
 # ---------------------------------------------------------------------------
 
+def _make_ssl_context(verify: bool = True):
+    """Return an SSL context, optionally disabling certificate verification."""
+    import ssl
+    if verify:
+        return ssl.create_default_context()
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _http_get(url: str, timeout: int = 30) -> bytes:
-    """Fetch bytes from a URL using urllib (stdlib)."""
+    """Fetch bytes from a URL using urllib (stdlib).
+
+    Tries with SSL verification first; falls back to unverified if the
+    local certificate store cannot verify the server (common on corporate
+    Windows machines with custom CA chains).
+    """
     from urllib.request import urlopen, Request
     from urllib.error import URLError
 
     req = Request(url, headers={
-        "User-Agent": f"SOCDataProcessor/{VERSION}",
+        "User-Agent": f"ASNClaimsProcessor/{VERSION}",
         "Accept": "application/vnd.github+json",
     })
-    try:
-        with urlopen(req, timeout=timeout) as resp:
-            return resp.read()
-    except URLError as exc:
-        raise ConnectionError(f"HTTP request failed for {url}: {exc}") from exc
+    for verify in (True, False):
+        try:
+            ctx = _make_ssl_context(verify)
+            with urlopen(req, timeout=timeout, context=ctx) as resp:
+                return resp.read()
+        except URLError as exc:
+            err_str = str(exc).upper()
+            if not verify or ("CERTIFICATE" not in err_str and "SSL" not in err_str):
+                raise ConnectionError(f"HTTP request failed for {url}: {exc}") from exc
+            logger.warning("SSL verification failed for %s, retrying without cert check", url)
+    raise ConnectionError(f"HTTP request failed for {url}")  # unreachable
 
 
 def _http_download_stream(url: str, dest: Path, timeout: int = 300) -> int:
@@ -250,22 +266,28 @@ def _http_download_stream(url: str, dest: Path, timeout: int = 300) -> int:
     from urllib.error import URLError
 
     req = Request(url, headers={
-        "User-Agent": f"SOCDataProcessor/{VERSION}",
+        "User-Agent": f"ASNClaimsProcessor/{VERSION}",
         "Accept": "application/octet-stream",
     })
-    try:
-        with urlopen(req, timeout=timeout) as resp:
-            total = 0
-            with open(dest, "wb") as f:
-                while True:
-                    chunk = resp.read(1024 * 1024)  # 1MB chunks
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    total += len(chunk)
-            return total
-    except URLError as exc:
-        raise ConnectionError(f"Download failed for {url}: {exc}") from exc
+    for verify in (True, False):
+        try:
+            ctx = _make_ssl_context(verify)
+            with urlopen(req, timeout=timeout, context=ctx) as resp:
+                total = 0
+                with open(dest, "wb") as f:
+                    while True:
+                        chunk = resp.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        total += len(chunk)
+                return total
+        except URLError as exc:
+            err_str = str(exc).upper()
+            if not verify or ("CERTIFICATE" not in err_str and "SSL" not in err_str):
+                raise ConnectionError(f"Download failed for {url}: {exc}") from exc
+            logger.warning("SSL verification failed for %s, retrying without cert check", url)
+    raise ConnectionError(f"Download failed for {url}")  # unreachable
 
 
 def _read_file_source(base_path: str, filename: str) -> bytes:

@@ -1,4 +1,4 @@
-; Inno Setup Script for SOC Data Processor
+; Inno Setup Script for ASN Claims Processor
 ; Requires Inno Setup 6.x (https://jrsoftware.org/isinfo.php)
 ;
 ; Build with: iscc installer.iss
@@ -6,7 +6,7 @@
 ;
 ; Prerequisites: Run PyInstaller first to create dist\OfflineDataApp\
 
-#define MyAppName "SOC Data Processor"
+#define MyAppName "ASN Claims Processor"
 ; Version is injected by build_installer.bat into version.iss
 ; If building manually, create version.iss with: #define MyAppVersion "1.0.0"
 #include "version.iss"
@@ -26,7 +26,7 @@ DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=installer_output
-OutputBaseFilename=SOCDataProcessor-Setup-{#MyAppVersion}
+OutputBaseFilename=ASNClaimsProcessor-Setup-{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

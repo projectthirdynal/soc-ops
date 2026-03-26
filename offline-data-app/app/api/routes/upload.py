@@ -54,6 +54,35 @@ class ColumnsResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _ensure_utf8(path: str) -> tuple[str, bool]:
+    """Detect CSV encoding and return a UTF-8 copy if needed.
+
+    Returns (path_to_use, created_new_file).
+    Supports UTF-8 (with/without BOM), UTF-16 (LE/BE), and CP1252/Latin-1.
+    """
+    raw = Path(path).read_bytes()
+
+    # UTF-16 BOM (LE or BE)
+    if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+        text = raw.decode('utf-16', errors='replace')
+    # UTF-8 BOM — strip and pass through
+    elif raw[:3] == b'\xef\xbb\xbf':
+        text = raw[3:].decode('utf-8', errors='replace')
+    else:
+        # Try pure UTF-8 first
+        try:
+            raw.decode('utf-8')
+            return path, False  # Already valid UTF-8
+        except UnicodeDecodeError:
+            # Fall back to Windows CP1252 (common for Excel-exported CSVs)
+            text = raw.decode('cp1252', errors='replace')
+
+    utf8_path = path + '.__utf8__.csv'
+    Path(utf8_path).write_text(text, encoding='utf-8')
+    logger.info("Re-encoded non-UTF-8 CSV to UTF-8: %s", Path(path).name)
+    return utf8_path, True
+
+
 def _normalize_column_name(name: str) -> str:
     """Lowercase, replace spaces/special chars with underscores."""
     name = name.strip().lower()
@@ -182,36 +211,43 @@ def _sanitize_identifier(name: str) -> str:
 
 
 def _import_csv(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) -> tuple[int, list[str]]:
-    """Import a CSV file via DuckDB read_csv_auto."""
-    # Read into a temporary relation to normalise column names
-    rel = db.read_csv(path, header=True)
-    original_cols = rel.columns
+    """Import a CSV file via DuckDB read_csv_auto.
 
-    normalized = _deduplicate_columns([_normalize_column_name(c) for c in original_cols])
-
-    # Rename columns — use safe identifier quoting
-    rename_exprs = [
-        f'{_sanitize_identifier(orig)} AS {_sanitize_identifier(norm)}'
-        for orig, norm in zip(original_cols, normalized)
-    ]
-    select_sql = ", ".join(rename_exprs)
-
-    # Check if raw_data exists for append
-    table_exists = False
+    Handles non-UTF-8 encodings (UTF-16, CP1252) by re-encoding to UTF-8 first.
+    """
+    read_path, created_tmp = _ensure_utf8(path)
     try:
-        db.execute("SELECT 1 FROM raw_data LIMIT 0")
-        table_exists = True
-    except Exception:
-        pass
+        rel = db.read_csv(read_path, header=True)
+        original_cols = rel.columns
 
-    # Use parameterised path via DuckDB's read_csv_auto($1) syntax
-    if append and table_exists:
-        db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM read_csv_auto(?)", [path])
-    else:
-        db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM read_csv_auto(?)", [path])
+        normalized = _deduplicate_columns([_normalize_column_name(c) for c in original_cols])
 
-    row_count_result = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()
-    return row_count_result[0] if row_count_result else 0, normalized
+        # Rename columns — use safe identifier quoting
+        rename_exprs = [
+            f'{_sanitize_identifier(orig)} AS {_sanitize_identifier(norm)}'
+            for orig, norm in zip(original_cols, normalized)
+        ]
+        select_sql = ", ".join(rename_exprs)
+
+        # Check if raw_data exists for append
+        table_exists = False
+        try:
+            db.execute("SELECT 1 FROM raw_data LIMIT 0")
+            table_exists = True
+        except Exception:
+            pass
+
+        # Use parameterised path via DuckDB's read_csv_auto($1) syntax
+        if append and table_exists:
+            db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM read_csv_auto(?)", [read_path])
+        else:
+            db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM read_csv_auto(?)", [read_path])
+
+        row_count_result = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()
+        return row_count_result[0] if row_count_result else 0, normalized
+    finally:
+        if created_tmp:
+            Path(read_path).unlink(missing_ok=True)
 
 
 def _import_xlsx(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) -> tuple[int, list[str]]:

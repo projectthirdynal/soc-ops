@@ -40,7 +40,7 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"version={v}\n")
               f.write(f"tag=v{v}\n")
-              f.write(f"installer=offline-data-app/installer_output/SOCDataProcessor-Setup-{v}.exe\n")
+              f.write(f"installer=offline-data-app/installer_output/ASNClaimsProcessor-Setup-{v}.exe\n")
 
       # -------------------------------------------------------
       # 3. Set up Python 3.11
@@ -128,18 +128,18 @@ jobs:
           ).stdout.strip() or "- Minor improvements and bug fixes"
 
           body = textwrap.dedent(f"""
-          ## SOC Data Processor {tag}
+          ## ASN Claims Processor {tag}
 
           ### Changes
           {commits}
 
           ### Installation
-          Download `SOCDataProcessor-Setup-{version}.exe` below and run it.
+          Download `ASNClaimsProcessor-Setup-{version}.exe` below and run it.
           If you have a previous version, the installer upgrades it automatically.
 
           ### Verification
           SHA256: `{sha256}`
-          Size: {int(size):,} bytes
+          Size: {{int(size):,}} bytes
           """).strip()
 
           with open("RELEASE_NOTES.md", "w", encoding="utf-8") as f:
@@ -153,7 +153,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: SOC Data Processor ${{ steps.version.outputs.tag }}
+          name: ASN Claims Processor ${{ steps.version.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: ${{ steps.version.outputs.installer }}
           fail_on_unmatched_files: true

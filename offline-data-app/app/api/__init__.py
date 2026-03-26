@@ -41,8 +41,8 @@ def create_app() -> FastAPI:
         Configured FastAPI application instance.
     """
     application = FastAPI(
-        title="SOC Data Processor",
-        description="Offline desktop data processing application",
+        title="ASN Claims Processor",
+        description="Offline desktop claims data processing application",
         version=VERSION,
     )
 
