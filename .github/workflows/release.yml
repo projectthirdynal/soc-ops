@@ -67,16 +67,12 @@ jobs:
         run: pyinstaller app.spec --noconfirm
 
       # -------------------------------------------------------
-      # 6. Install Inno Setup 6 (pinned version)
+      # 6. Install Inno Setup 6 via Chocolatey (pre-installed on windows-latest)
       # -------------------------------------------------------
       - name: Install Inno Setup
-        shell: powershell
+        shell: cmd
         working-directory: ${{ github.workspace }}
-        run: |
-          $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
-          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\innosetup.exe"
-          Start-Process -FilePath "$env:TEMP\innosetup.exe" `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+        run: choco install innosetup --no-progress -y
 
       # -------------------------------------------------------
       # 7. Build Windows installer
