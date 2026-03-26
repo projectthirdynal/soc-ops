@@ -37,7 +37,7 @@ VERSION_JSON = ROOT / "version.json"
 def read_current_version() -> str:
     """Read the current version from version.py (authoritative source)."""
     text = VERSION_PY.read_text(encoding="utf-8")
-    m = re.search(r'^VERSION\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+    m = re.search(r'^VERSION(?:\s*:\s*\w+)?\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
     if not m:
         sys.exit(f"ERROR: Could not parse VERSION from {VERSION_PY}")
     return m.group(1)
