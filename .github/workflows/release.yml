@@ -1,0 +1,163 @@
+name: Build & Release
+
+# Triggers when you push a version tag from your Linux machine:
+#   ./offline-data-app/release.sh patch "changelog message"
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+defaults:
+  run:
+    working-directory: offline-data-app
+
+jobs:
+  build-and-release:
+    name: Build Windows Installer & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      # -------------------------------------------------------
+      # 1. Checkout (full history for git log changelog)
+      # -------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -------------------------------------------------------
+      # 2. Read version from offline-data-app/version.json
+      # -------------------------------------------------------
+      - name: Read version
+        id: version
+        shell: python
+        working-directory: offline-data-app
+        run: |
+          import json, os
+          data = json.loads(open("version.json").read())
+          v = data["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"version={v}\n")
+              f.write(f"tag=v{v}\n")
+              f.write(f"installer=offline-data-app/installer_output/SOCDataProcessor-Setup-{v}.exe\n")
+
+      # -------------------------------------------------------
+      # 3. Set up Python 3.11
+      # -------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: offline-data-app/requirements.txt
+
+      # -------------------------------------------------------
+      # 4. Install Python dependencies
+      # -------------------------------------------------------
+      - name: Install dependencies
+        shell: cmd
+        run: pip install -r requirements.txt --quiet
+
+      # -------------------------------------------------------
+      # 5. Build with PyInstaller
+      # -------------------------------------------------------
+      - name: Build with PyInstaller
+        shell: cmd
+        run: pyinstaller app.spec --noconfirm
+
+      # -------------------------------------------------------
+      # 6. Install Inno Setup 6 (pinned version)
+      # -------------------------------------------------------
+      - name: Install Inno Setup
+        shell: powershell
+        working-directory: ${{ github.workspace }}
+        run: |
+          $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\innosetup.exe"
+          Start-Process -FilePath "$env:TEMP\innosetup.exe" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+
+      # -------------------------------------------------------
+      # 7. Build Windows installer
+      # -------------------------------------------------------
+      - name: Build Windows installer
+        shell: cmd
+        run: |
+          if not exist installer_output mkdir installer_output
+          echo #define MyAppVersion "${{ steps.version.outputs.version }}" > version.iss
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          if errorlevel 1 exit /b 1
+
+      # -------------------------------------------------------
+      # 8. Compute SHA256 + size
+      # -------------------------------------------------------
+      - name: Compute SHA256
+        id: sha256
+        shell: python
+        working-directory: ${{ github.workspace }}
+        run: |
+          import hashlib, os
+          path = r"${{ steps.version.outputs.installer }}"
+          digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+          size = os.path.getsize(path)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"hash={digest}\n")
+              f.write(f"size={size}\n")
+
+      # -------------------------------------------------------
+      # 9. Auto-generate changelog from git log
+      # -------------------------------------------------------
+      - name: Generate changelog
+        shell: python
+        working-directory: ${{ github.workspace }}
+        run: |
+          import subprocess, textwrap
+
+          tag     = "${{ steps.version.outputs.tag }}"
+          version = "${{ steps.version.outputs.version }}"
+          sha256  = "${{ steps.sha256.outputs.hash }}"
+          size    = "${{ steps.sha256.outputs.size }}"
+
+          prev = subprocess.run(
+              ["git", "describe", "--tags", "--abbrev=0", f"{tag}^"],
+              capture_output=True, text=True
+          ).stdout.strip()
+
+          git_range = f"{prev}..{tag}" if prev else tag
+
+          commits = subprocess.run(
+              ["git", "log", git_range, "--pretty=format:- %s", "--no-merges"],
+              capture_output=True, text=True
+          ).stdout.strip() or "- Minor improvements and bug fixes"
+
+          body = textwrap.dedent(f"""
+          ## SOC Data Processor {tag}
+
+          ### Changes
+          {commits}
+
+          ### Installation
+          Download `SOCDataProcessor-Setup-{version}.exe` below and run it.
+          If you have a previous version, the installer upgrades it automatically.
+
+          ### Verification
+          SHA256: `{sha256}`
+          Size: {int(size):,} bytes
+          """).strip()
+
+          with open("RELEASE_NOTES.md", "w", encoding="utf-8") as f:
+              f.write(body)
+          print(body)
+
+      # -------------------------------------------------------
+      # 10. Create GitHub Release + upload installer
+      # -------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: SOC Data Processor ${{ steps.version.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: ${{ steps.version.outputs.installer }}
+          fail_on_unmatched_files: true
