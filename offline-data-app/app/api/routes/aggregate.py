@@ -121,7 +121,7 @@ async def preview_aggregate(
     total = total_result[0] if total_result else 0
 
     offset = (page - 1) * size
-    rows = db.execute(f"SELECT * FROM person_summary LIMIT {size} OFFSET {offset}").fetchall()
+    rows = db.execute("SELECT * FROM person_summary LIMIT ? OFFSET ?", [size, offset]).fetchall()
 
     return {
         "columns": columns,
@@ -134,7 +134,9 @@ async def preview_aggregate(
 
 @router.get("/aggregate/export")
 async def export_aggregate() -> StreamingResponse:
-    """Export person_summary as a CSV file download."""
+    """Export person_summary as a streaming CSV file download."""
+    import csv
+
     db = get_db()
 
     try:
@@ -143,25 +145,27 @@ async def export_aggregate() -> StreamingResponse:
         raise HTTPException(status_code=400, detail="person_summary not yet created.")
 
     columns = [d[0] for d in desc]
-
-    # Stream CSV via DuckDB
-    import csv
-
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(columns)
-
-    # Fetch in chunks to avoid loading everything into memory
     total_result = db.execute("SELECT COUNT(*) FROM person_summary").fetchone()
     total = total_result[0] if total_result else 0
-    chunk = 10_000
-    for offset in range(0, total, chunk):
-        rows = db.execute(f"SELECT * FROM person_summary LIMIT {chunk} OFFSET {offset}").fetchall()
-        writer.writerows(rows)
 
-    buffer.seek(0)
+    def _csv_generator():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(columns)
+        yield buf.getvalue()
+
+        chunk = 10_000
+        for offset in range(0, total, chunk):
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            rows = db.execute(
+                "SELECT * FROM person_summary LIMIT ? OFFSET ?", [chunk, offset]
+            ).fetchall()
+            writer.writerows(rows)
+            yield buf.getvalue()
+
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        _csv_generator(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=person_summary.csv"},
     )

@@ -10,15 +10,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-from app.core.version import VERSION, BUILD_DATE
+from app.core.version import VERSION
 
 logger = logging.getLogger(__name__)
 
-# Re-export for backwards compatibility (route modules import from app.api)
-from app.api.ops_lock import acquire_operation, release_operation  # noqa: E402,F401
+# Re-export for route modules that do `from app.api import acquire_operation, release_operation`
+from app.api.ops_lock import acquire_operation, release_operation
+
+__all__ = ["create_app", "acquire_operation", "release_operation"]
 
 # Paths that should not be logged to avoid noise
-_QUIET_PATHS = frozenset({"/api/health", "/api/split/progress"})
+_QUIET_PATHS = frozenset({"/api/health", "/api/split/progress", "/api/split/file/progress"})
 
 
 def create_app() -> FastAPI:

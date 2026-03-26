@@ -125,26 +125,32 @@ def run_clustering(
     # ------------------------------------------------------------------
     # 5. Write cluster_id back
     # ------------------------------------------------------------------
+    # Determine the person key column — always the first column in person_summary
+    # (person_key is whatever column was used during aggregation, e.g. "operator")
+    ps_desc = db.execute("SELECT * FROM person_summary LIMIT 0").description
+    pk_col = ps_desc[0][0]
+    pk_col_quoted = '"' + pk_col.replace('"', '""') + '"'
+
     # Add a row_number column to person_summary for joining
     db.execute("ALTER TABLE person_summary DROP COLUMN IF EXISTS cluster_id")
     db.execute("ALTER TABLE person_summary ADD COLUMN cluster_id INTEGER")
 
-    # Write labels back via a temp table keyed on person_key
+    # Write labels back via a temp table keyed on row number
     db.execute("CREATE OR REPLACE TEMP TABLE _cluster_labels (rn INTEGER, cluster_id INTEGER)")
     label_data = [(int(i + 1), int(labels[i])) for i in range(len(labels))]
     db.executemany("INSERT INTO _cluster_labels VALUES (?, ?)", label_data)
 
     # Match rows by row-number order (same SELECT order used to fetch features)
-    db.execute("""
+    db.execute(f"""
         WITH numbered AS (
-            SELECT ROW_NUMBER() OVER () AS rn, person_key
+            SELECT ROW_NUMBER() OVER () AS rn, {pk_col_quoted}
             FROM person_summary
         )
         UPDATE person_summary
         SET cluster_id = cl.cluster_id
         FROM numbered n
         JOIN _cluster_labels cl ON cl.rn = n.rn
-        WHERE person_summary.person_key = n.person_key
+        WHERE person_summary.{pk_col_quoted} = n.{pk_col_quoted}
     """)
 
     db.execute("DROP TABLE IF EXISTS _cluster_labels")

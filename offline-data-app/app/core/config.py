@@ -62,8 +62,8 @@ class Settings:
         """Create all required directories if they do not exist."""
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info("Data directory: %s", self.DATA_DIR)
-        logger.info("Exports directory: %s", self.EXPORTS_DIR)
+        logger.debug("Data directory: %s", self.DATA_DIR)
+        logger.debug("Exports directory: %s", self.EXPORTS_DIR)
 
 
 # Module-level singleton --------------------------------------------------

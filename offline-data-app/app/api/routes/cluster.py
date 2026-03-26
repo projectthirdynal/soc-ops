@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.clusterer import run_clustering
-from app.core.config import settings
 from app.api import acquire_operation, release_operation
 
 logger = logging.getLogger(__name__)
@@ -131,7 +130,7 @@ async def cluster_results(
 
     offset = (page - 1) * size
     rows = db.execute(
-        f"SELECT * FROM person_summary ORDER BY cluster_id LIMIT {size} OFFSET {offset}"
+        "SELECT * FROM person_summary ORDER BY cluster_id LIMIT ? OFFSET ?", [size, offset]
     ).fetchall()
 
     return {
@@ -158,7 +157,7 @@ async def cluster_history() -> list[dict[str, Any]]:
 
 @router.get("/cluster/export")
 async def export_clustered() -> StreamingResponse:
-    """Export clustered person_summary as a CSV file download."""
+    """Export clustered person_summary as a streaming CSV file download."""
     db = get_db()
 
     try:
@@ -170,22 +169,28 @@ async def export_clustered() -> StreamingResponse:
     if "cluster_id" not in columns:
         raise HTTPException(status_code=400, detail="No clustering has been run yet.")
 
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(columns)
-
     total_result = db.execute("SELECT COUNT(*) FROM person_summary").fetchone()
     total = total_result[0] if total_result else 0
-    chunk = 10_000
-    for offset in range(0, total, chunk):
-        rows = db.execute(
-            f"SELECT * FROM person_summary ORDER BY cluster_id LIMIT {chunk} OFFSET {offset}"
-        ).fetchall()
-        writer.writerows(rows)
 
-    buffer.seek(0)
+    def _csv_generator():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(columns)
+        yield buf.getvalue()
+
+        chunk = 10_000
+        for offset in range(0, total, chunk):
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            rows = db.execute(
+                "SELECT * FROM person_summary ORDER BY cluster_id LIMIT ? OFFSET ?",
+                [chunk, offset],
+            ).fetchall()
+            writer.writerows(rows)
+            yield buf.getvalue()
+
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        _csv_generator(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=clustered_person_summary.csv"},
     )

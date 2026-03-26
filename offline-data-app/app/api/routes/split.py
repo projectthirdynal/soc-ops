@@ -119,8 +119,7 @@ async def start_split(req: SplitRequest) -> dict[str, Any]:
     )
 
     # Run split in a background task
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_split, db, output_dir, req.chunk_size, req.order_column)
+    asyncio.get_running_loop().run_in_executor(None, _run_split, db, output_dir, req.chunk_size, req.order_column)
 
     return {"status": "started", "output_folder": output_dir, "chunk_size": req.chunk_size}
 
@@ -252,8 +251,7 @@ async def split_uploaded_file(
         _file_split_progress = {"running": True, "progress": 0, "files_written": 0, "done": False, "error": None}
 
     # Run in background
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_file_split, tmp_path, suffix, output_dir, chunk_size)
+    asyncio.get_running_loop().run_in_executor(None, _run_file_split, tmp_path, suffix, output_dir, chunk_size)
 
     return {"status": "started", "output_folder": output_dir, "chunk_size": chunk_size}
 
@@ -274,12 +272,19 @@ def _run_file_split(
 
         # Load file into temp table
         if suffix == ".csv" or suffix == ".tsv":
-            mem_db.execute(f"CREATE TABLE tmp_split AS SELECT * FROM read_csv_auto('{tmp_path}')")
+            mem_db.execute("CREATE TABLE tmp_split AS SELECT * FROM read_csv_auto(?)", [tmp_path])
         else:
-            # XLSX — use polars to load then register
+            # XLSX — use polars → temp parquet → DuckDB (avoids pyarrow dependency)
             import polars as pl
-            df = pl.read_excel(tmp_path)
-            mem_db.execute("CREATE TABLE tmp_split AS SELECT * FROM df")
+            tmp_parquet = tmp_path + ".parquet"
+            try:
+                pl.read_excel(tmp_path).write_parquet(tmp_parquet)
+                mem_db.execute(
+                    "CREATE TABLE tmp_split AS SELECT * FROM read_parquet(?)",
+                    [tmp_parquet],
+                )
+            finally:
+                Path(tmp_parquet).unlink(missing_ok=True)
 
         total_rows = mem_db.execute("SELECT COUNT(*) FROM tmp_split").fetchone()[0]
         if total_rows == 0:
