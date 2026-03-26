@@ -10,17 +10,24 @@ logger = logging.getLogger(__name__)
 
 
 def _default_base_dir() -> Path:
-    """Resolve the base data directory.
-
-    Tries platformdirs first; falls back to a ``data/`` folder next to the
-    application root.
-    """
+    """Resolve the base data directory (app internal storage)."""
     try:
         from platformdirs import user_data_dir
-
         return Path(user_data_dir("offline-data-app", appauthor=False))
     except ImportError:
         return Path(__file__).resolve().parent.parent.parent / "data"
+
+
+def _default_exports_dir() -> Path:
+    """Resolve the default export directory — user's Documents folder."""
+    try:
+        from platformdirs import user_documents_dir
+        docs = Path(user_documents_dir())
+    except (ImportError, Exception):
+        docs = Path.home() / "Documents"
+    target = docs / "ASN Claims Processor"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 @dataclass
@@ -55,8 +62,8 @@ class Settings:
 
     @property
     def EXPORTS_DIR(self) -> Path:
-        """Default directory for split-file exports."""
-        return self.BASE_DIR / "exports"
+        """Default directory for split-file exports (Documents/ASN Claims Processor)."""
+        return _default_exports_dir()
 
     def ensure_dirs(self) -> None:
         """Create all required directories if they do not exist."""

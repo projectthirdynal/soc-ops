@@ -425,7 +425,11 @@ async def get_timeline(
 
 @router.get("/dashboard/cogs-distribution", response_model=list[DistributionItem])
 async def get_cogs_distribution() -> list[dict[str, Any]]:
-    """Return binned distribution of cogs_share_local into 0.2-width buckets."""
+    """Return binned distribution of cogs_share_local using dynamic equal-width bins.
+
+    Bins are computed from the actual min/max of the data so the chart works
+    regardless of whether values are fractions (0–1) or large currency amounts.
+    """
     t0 = time.perf_counter()
     db = get_db()
     info = _col_info(db)
@@ -433,26 +437,35 @@ async def get_cogs_distribution() -> list[dict[str, Any]]:
         return []
 
     try:
-        total: int = db.execute("SELECT COUNT(*) FROM raw_data WHERE cogs_share_local IS NOT NULL").fetchone()[0]
-        if total == 0:
+        row = db.execute(
+            "SELECT COUNT(*), MIN(CAST(cogs_share_local AS DOUBLE)), MAX(CAST(cogs_share_local AS DOUBLE)) "
+            "FROM raw_data WHERE cogs_share_local IS NOT NULL"
+        ).fetchone()
+        total, min_val, max_val = row
+        if not total or min_val is None or max_val is None:
             return []
+        if min_val == max_val:
+            return [{"label": str(int(min_val) if min_val == int(min_val) else round(min_val, 2)),
+                     "count": total, "pct": 100.0}]
 
-        bins = [
-            ("0.0–0.2", 0.0, 0.2),
-            ("0.2–0.4", 0.2, 0.4),
-            ("0.4–0.6", 0.4, 0.6),
-            ("0.6–0.8", 0.6, 0.8),
-            ("0.8–1.0", 0.8, 1.0),
-        ]
+        n_bins = 5
+        width = (max_val - min_val) / n_bins
         result = []
-        for label, lo, hi in bins:
+        for i in range(n_bins):
+            lo = min_val + i * width
+            hi = min_val + (i + 1) * width
+            is_last = i == n_bins - 1
             cnt: int = db.execute(
-                "SELECT COUNT(*) FROM raw_data "
-                "WHERE CAST(cogs_share_local AS DOUBLE) >= ? AND CAST(cogs_share_local AS DOUBLE) < ?",
+                f"SELECT COUNT(*) FROM raw_data "
+                f"WHERE CAST(cogs_share_local AS DOUBLE) >= ? "
+                f"AND CAST(cogs_share_local AS DOUBLE) {'<=' if is_last else '<'} ?",
                 [lo, hi],
             ).fetchone()[0]
+            # Format label: integers if whole numbers, else 1 decimal
+            def _fmt(v: float) -> str:
+                return str(int(v)) if v == int(v) else f"{v:.1f}"
             result.append({
-                "label": label,
+                "label": f"{_fmt(lo)}–{_fmt(hi)}",
                 "count": cnt,
                 "pct": round(cnt / total * 100, 1) if total else 0.0,
             })
@@ -467,27 +480,37 @@ async def get_cogs_distribution() -> list[dict[str, Any]]:
 
 
 @router.get("/dashboard/hub-performance")
-async def get_hub_performance(limit: int = Query(10, ge=1, le=30)) -> list[dict[str, Any]]:
-    """Return per-hub claims count and average COGS share."""
+async def get_hub_performance(
+    limit: int = Query(10, ge=1, le=30),
+    hub: str = Query("", description="Optional hub filter"),
+) -> list[dict[str, Any]]:
+    """Return per-hub claims count and optional average COGS share."""
     t0 = time.perf_counter()
     db = get_db()
     info = _col_info(db)
     if not info or "hub" not in info:
         return []
 
+    has_cogs = "cogs_share_local" in info
+    cogs_expr = "AVG(CAST(cogs_share_local AS DOUBLE))" if has_cogs else "NULL"
+
+    where = "WHERE CAST(hub AS VARCHAR) = ?" if hub else ""
+    params: list[Any] = [hub, limit] if hub else [limit]
+
     try:
         rows = db.execute(
-            """
+            f"""
             SELECT
                 COALESCE(CAST(hub AS VARCHAR), '(null)') AS hub,
                 COUNT(*) AS claims,
-                AVG(CAST(cogs_share_local AS DOUBLE)) AS avg_cogs
+                {cogs_expr} AS avg_cogs
             FROM raw_data
+            {where}
             GROUP BY hub
             ORDER BY claims DESC
             LIMIT ?
             """,
-            [limit],
+            params,
         ).fetchall()
         result = [
             {

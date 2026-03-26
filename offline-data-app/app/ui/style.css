@@ -393,9 +393,11 @@ body {
   letter-spacing: -0.01em;
 }
 
-canvas.chart-canvas { display: block; width: 100%; }
+canvas.chart-canvas { display: block; width: 100% !important; max-width: 100%; }
 .chart-canvas { width: 100%; height: 260px; display: block; }
 .chart-canvas-wide { height: 220px; }
+/* Chart.js needs a positioned parent for responsive mode */
+.chart-card { position: relative; overflow: hidden; }
 
 .chart-legend {
   display: flex;

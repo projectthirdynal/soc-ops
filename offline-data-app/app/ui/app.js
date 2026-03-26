@@ -123,191 +123,106 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // ============================================================  CHARTS  ====
 // ---------------------------------------------------------------------------
 
+// Chart.js instance registry — destroy before re-creating to prevent leaks
+const _charts = {};
+function _destroyChart(id) {
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+}
+
 /**
- * Draw a pie / donut chart on a Canvas element.
- * @param {HTMLCanvasElement} canvas
- * @param {string[]} labels
- * @param {number[]} values
+ * Draw a doughnut chart using Chart.js.
  */
 function drawPieChart(canvas, labels, values, palette) {
   const pal = palette || PALETTE;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
   const total = values.reduce((a, b) => a + b, 0);
   if (total === 0) return;
-
-  const cx = W / 2;
-  const cy = H / 2;
-  const r = Math.min(cx, cy) - 10;
-  const inner = r * 0.5; // donut hole
-
-  let start = -Math.PI / 2;
-  values.forEach((v, i) => {
-    const slice = (v / total) * 2 * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, start, start + slice);
-    ctx.closePath();
-    ctx.fillStyle = pal[i % pal.length];
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    start += slice;
+  const id = canvas.id;
+  _destroyChart(id);
+  _charts[id] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: pal.slice(0, values.length), borderWidth: 2, borderColor: '#fff' }],
+    },
+    options: {
+      responsive: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString()} (${(ctx.parsed / total * 100).toFixed(1)}%)`,
+          },
+        },
+      },
+    },
   });
-
-  // Donut hole
-  ctx.beginPath();
-  ctx.arc(cx, cy, inner, 0, 2 * Math.PI);
-  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg-card') || '#fff';
-  ctx.fill();
 }
 
 /**
- * Draw a horizontal bar chart on a Canvas element.
- * @param {HTMLCanvasElement} canvas
- * @param {string[]} labels
- * @param {number[]} values
- * @param {object} opts — {title, formatValue}
+ * Draw a horizontal bar chart using Chart.js.
  */
 function drawHBarChart(canvas, labels, values, opts = {}) {
   const pal = opts.palette || PALETTE;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
   if (!labels.length) return;
-
-  const pad = { top: 10, right: 20, bottom: 10, left: 4 };
-  const labelMaxLen = Math.min(220, Math.max(...labels.map(l => l.length)) * 7 + 16);
-  const barAreaX = pad.left + labelMaxLen;
-  const barAreaW = W - barAreaX - pad.right;
-  const rowH = Math.max(22, Math.floor((H - pad.top - pad.bottom) / labels.length));
-  const barH = Math.min(rowH - 6, 22);
-  const maxVal = Math.max(...values, 1);
-
-  const fmt = opts.formatValue || (v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(1)}K` : Number.isInteger(v) ? v.toString() : v.toFixed(1));
-
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.fillStyle = '#333';
-
-  labels.forEach((lbl, i) => {
-    const y = pad.top + i * rowH;
-    const barW = (values[i] / maxVal) * barAreaW;
-
-    // Label (truncated)
-    const maxChars = Math.floor(labelMaxLen / 7);
-    const displayLbl = lbl.length > maxChars ? lbl.slice(0, maxChars - 1) + '…' : lbl;
-    ctx.fillStyle = '#555';
-    ctx.textAlign = 'right';
-    ctx.fillText(displayLbl, pad.left + labelMaxLen - 6, y + barH / 2 + 4);
-
-    // Bar
-    ctx.fillStyle = pal[i % pal.length];
-    ctx.beginPath();
-    ctx.roundRect
-      ? ctx.roundRect(barAreaX, y, barW, barH, 3)
-      : ctx.rect(barAreaX, y, barW, barH);
-    ctx.fill();
-
-    // Value label
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'left';
-    ctx.fillText(fmt(values[i]), barAreaX + barW + 4, y + barH / 2 + 4);
+  const id = canvas.id;
+  _destroyChart(id);
+  const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(1)}K` : Number.isInteger(v) ? v.toString() : v.toFixed(1);
+  _charts[id] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: labels.map((_, i) => pal[i % pal.length]),
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.parsed.x)}` } },
+      },
+      scales: {
+        x: { grid: { color: '#f0f0f0' }, ticks: { callback: v => fmt(v), font: { size: 11 } } },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+      },
+    },
   });
 }
 
 /**
- * Draw a line chart on a Canvas element.
- * @param {HTMLCanvasElement} canvas
- * @param {string[]} labels
- * @param {number[]} values
+ * Draw a line / area chart using Chart.js.
  */
 function drawLineChart(canvas, labels, values) {
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
   if (!labels.length || !values.length) return;
-
-  const pad = { top: 20, right: 20, bottom: 40, left: 60 };
-  const plotW = W - pad.left - pad.right;
-  const plotH = H - pad.top - pad.bottom;
-
-  const maxV = Math.max(...values, 1);
-  const minV = 0;
-  const range = maxV - minV || 1;
-
-  const xStep = plotW / Math.max(labels.length - 1, 1);
-
-  // Grid lines (5)
-  ctx.strokeStyle = '#e5e7eb';
-  ctx.lineWidth = 1;
-  for (let g = 0; g <= 5; g++) {
-    const gy = pad.top + plotH - (g / 5) * plotH;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, gy);
-    ctx.lineTo(pad.left + plotW, gy);
-    ctx.stroke();
-    ctx.fillStyle = '#999';
-    ctx.font = '11px system-ui';
-    ctx.textAlign = 'right';
-    const gv = minV + (g / 5) * range;
-    ctx.fillText(gv >= 1e3 ? `${(gv/1e3).toFixed(0)}K` : gv.toFixed(0), pad.left - 6, gy + 4);
-  }
-
-  // X-axis labels (show at most 12)
-  const step = Math.max(1, Math.floor(labels.length / 12));
-  ctx.fillStyle = '#666';
-  ctx.font = '10px system-ui';
-  ctx.textAlign = 'center';
-  labels.forEach((lbl, i) => {
-    if (i % step !== 0 && i !== labels.length - 1) return;
-    const x = pad.left + i * xStep;
-    ctx.fillText(lbl.slice(0, 10), x, pad.top + plotH + 16);
-  });
-
-  // Area fill
-  const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
-  gradient.addColorStop(0, 'rgba(78,121,167,0.3)');
-  gradient.addColorStop(1, 'rgba(78,121,167,0.02)');
-  ctx.beginPath();
-  values.forEach((v, i) => {
-    const x = pad.left + i * xStep;
-    const y = pad.top + plotH - ((v - minV) / range) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.lineTo(pad.left + (values.length - 1) * xStep, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // Line
-  ctx.beginPath();
-  ctx.strokeStyle = '#4e79a7';
-  ctx.lineWidth = 2;
-  values.forEach((v, i) => {
-    const x = pad.left + i * xStep;
-    const y = pad.top + plotH - ((v - minV) / range) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Dots
-  ctx.fillStyle = '#4e79a7';
-  values.forEach((v, i) => {
-    if (labels.length > 60 && i % step !== 0) return;
-    const x = pad.left + i * xStep;
-    const y = pad.top + plotH - ((v - minV) / range) * plotH;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, 2 * Math.PI);
-    ctx.fill();
+  const id = canvas.id;
+  _destroyChart(id);
+  const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(1)}K` : v.toFixed(0);
+  _charts[id] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16,185,129,0.12)',
+        borderWidth: 2,
+        pointRadius: labels.length > 60 ? 0 : 3,
+        fill: true,
+        tension: 0.3,
+      }],
+    },
+    options: {
+      responsive: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#f0f0f0' }, ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+        y: { grid: { color: '#f0f0f0' }, ticks: { callback: v => fmt(v), font: { size: 11 } } },
+      },
+    },
   });
 }
 
@@ -444,7 +359,8 @@ async function renderHubPerformance() {
   const canvas = document.getElementById('hubPerfCanvas');
   if (!canvas) return;
   try {
-    const data = await apiFetch('/api/dashboard/hub-performance?limit=10');
+    const hubParam = _dashHubFilter ? `&hub=${encodeURIComponent(_dashHubFilter)}` : '';
+    const data = await apiFetch(`/api/dashboard/hub-performance?limit=10${hubParam}`);
     if (!data.length) return;
     const labels = data.map(d => d.hub);
     const claimsVals = data.map(d => d.claims);
@@ -1074,9 +990,11 @@ async function init() {
   }
 }
 
-// Size all canvas elements to match their CSS display size
+// Chart.js handles its own responsive sizing — just set explicit pixel dimensions
+// for canvases that haven't been claimed by a Chart.js instance yet.
 function resizeAllCanvases() {
   document.querySelectorAll('canvas.chart-canvas').forEach(c => {
+    if (_charts[c.id]) return; // Chart.js manages this canvas
     const rect = c.parentElement.getBoundingClientRect();
     const w = rect.width > 50 ? Math.floor(rect.width - 40) : 560;
     c.width  = w;
@@ -1084,7 +1002,9 @@ function resizeAllCanvases() {
   });
 }
 
-window.addEventListener('resize', () => { resizeAllCanvases(); });
+window.addEventListener('resize', () => {
+  Object.values(_charts).forEach(ch => ch.resize());
+});
 
 // ---------------------------------------------------------------------------
 // =====================================================  UPDATE SYSTEM  =====
