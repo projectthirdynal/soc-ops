@@ -335,10 +335,19 @@ const GREEN_PALETTE = [
 async function renderCogsDistribution() {
   const canvas = document.getElementById('cogsDistCanvas');
   const legend = document.getElementById('cogsDistLegend');
+  const placeholder = document.getElementById('cogsDistPlaceholder');
   if (!canvas) return;
   try {
     const data = await apiFetch('/api/dashboard/cogs-distribution');
-    if (!data.length) { return; }
+    if (!data.length) {
+      canvas.style.display = 'none';
+      if (legend) legend.style.display = 'none';
+      if (placeholder) placeholder.style.display = 'block';
+      return;
+    }
+    canvas.style.display = '';
+    if (legend) legend.style.display = '';
+    if (placeholder) placeholder.style.display = 'none';
     const labels = data.map(d => d.label);
     const values = data.map(d => d.count);
     drawPieChart(canvas, labels, values, GREEN_PALETTE);
@@ -357,11 +366,18 @@ async function renderCogsDistribution() {
 
 async function renderHubPerformance() {
   const canvas = document.getElementById('hubPerfCanvas');
+  const placeholder = document.getElementById('hubPerfPlaceholder');
   if (!canvas) return;
   try {
     const hubParam = _dashHubFilter ? `&hub=${encodeURIComponent(_dashHubFilter)}` : '';
     const data = await apiFetch(`/api/dashboard/hub-performance?limit=10${hubParam}`);
-    if (!data.length) return;
+    if (!data.length) {
+      canvas.style.display = 'none';
+      if (placeholder) placeholder.style.display = 'block';
+      return;
+    }
+    canvas.style.display = '';
+    if (placeholder) placeholder.style.display = 'none';
     const labels = data.map(d => d.hub);
     const claimsVals = data.map(d => d.claims);
     drawHBarChart(canvas, labels, claimsVals, { palette: GREEN_PALETTE });

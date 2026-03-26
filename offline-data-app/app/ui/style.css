@@ -413,6 +413,16 @@ canvas.chart-canvas { display: block; width: 100% !important; max-width: 100%; }
   margin-top: .65rem;
 }
 
+.chart-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  color: var(--text-muted);
+  font-size: .85rem;
+  text-align: center;
+}
+
 .legend-item {
   font-size: .72rem;
   display: flex;
