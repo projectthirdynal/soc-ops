@@ -217,9 +217,10 @@ def _import_csv(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) 
     """
     read_path, created_tmp = _ensure_utf8(path)
     try:
-        # Use lenient options: wide files (100s of columns) and non-standard
-        # CSVs can confuse DuckDB's sniffer in strict mode.
-        csv_opts = "strict_mode=false, ignore_errors=true, null_padding=true"
+        # Parse once with lenient options — wide files and non-standard CSVs
+        # can confuse DuckDB's sniffer in strict mode.  Registering the
+        # relation avoids a second independent parse (which may assign
+        # generic column0/column1 names inconsistent with the first parse).
         rel = db.read_csv(read_path, header=True, strict_mode=False, ignore_errors=True, null_padding=True)
         original_cols = rel.columns
 
@@ -240,10 +241,15 @@ def _import_csv(db: duckdb.DuckDBPyConnection, path: str, append: bool = False) 
         except Exception:
             pass
 
-        if append and table_exists:
-            db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM read_csv_auto(?, {csv_opts})", [read_path])
-        else:
-            db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM read_csv_auto(?, {csv_opts})", [read_path])
+        # Register the already-parsed relation so we query it exactly once
+        db.register("_csv_import", rel)
+        try:
+            if append and table_exists:
+                db.execute(f"INSERT INTO raw_data SELECT {select_sql} FROM _csv_import")
+            else:
+                db.execute(f"CREATE OR REPLACE TABLE raw_data AS SELECT {select_sql} FROM _csv_import")
+        finally:
+            db.execute("DROP VIEW IF EXISTS _csv_import")
 
         row_count_result = db.execute("SELECT COUNT(*) FROM raw_data").fetchone()
         return row_count_result[0] if row_count_result else 0, normalized
