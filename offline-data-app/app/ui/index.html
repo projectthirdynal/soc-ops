@@ -507,6 +507,22 @@
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
         <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
       </div>
+
+      <hr style="margin:1.5rem 0;border-color:var(--border)">
+      <div>
+        <p class="form-label" style="font-weight:600;color:var(--error)">Danger Zone</p>
+        <p class="muted" style="margin-bottom:.75rem">
+          Remove imported data from the database. Your split files on disk are not affected.
+        </p>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+          <button class="btn btn-danger" onclick="clearData('data')">Clear Imported Data</button>
+          <button class="btn btn-danger" onclick="clearData('all')">Reset Everything</button>
+        </div>
+        <p class="muted" style="margin-top:.5rem">
+          <strong>Clear Imported Data</strong> — removes raw data and summaries, keeps history.<br>
+          <strong>Reset Everything</strong> — wipes all tables and history logs.
+        </p>
+      </div>
     </div>
   </div>
 </div>

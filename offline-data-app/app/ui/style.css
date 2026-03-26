@@ -478,6 +478,15 @@ canvas.chart-canvas { display: block; width: 100%; }
   background: var(--gray-200);
   border-color: var(--gray-300);
 }
+.btn-danger {
+  background: var(--error);
+  color: #fff;
+  border: 1px solid var(--error);
+}
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
 
 .btn-success {
   background: var(--success-600);

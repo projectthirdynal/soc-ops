@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
     # Routers (imported here to avoid circular imports — route modules
     # import acquire_operation / release_operation from app.api)
     # ------------------------------------------------------------------
-    from app.api.routes import upload, split, aggregate, cluster, dashboard, update, search
+    from app.api.routes import upload, split, aggregate, cluster, dashboard, update, search, data
 
     application.include_router(upload.router, prefix="/api", tags=["upload"])
     application.include_router(split.router, prefix="/api", tags=["split"])
@@ -92,6 +92,7 @@ def create_app() -> FastAPI:
     application.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
     application.include_router(update.router, prefix="/api", tags=["update"])
     application.include_router(search.router, prefix="/api", tags=["search"])
+    application.include_router(data.router, prefix="/api", tags=["data"])
 
     # ------------------------------------------------------------------
     # Static UI files

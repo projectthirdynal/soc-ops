@@ -1178,6 +1178,23 @@ async function installUpdate() {
 // =====================================================  SETTINGS MODAL  ====
 // ---------------------------------------------------------------------------
 
+async function clearData(scope) {
+  const label = scope === 'all' ? 'Reset Everything' : 'Clear Imported Data';
+  const detail = scope === 'all'
+    ? 'This will wipe ALL tables including import history and cluster runs. Cannot be undone.'
+    : 'This will remove raw_data and person_summary. Import history is kept. Cannot be undone.';
+  if (!confirm(`${label}\n\n${detail}\n\nContinue?`)) return;
+
+  try {
+    const res = await apiFetch(`/api/data/clear?scope=${scope}`, { method: 'POST' });
+    showToast(`Cleared: ${res.cleared.join(', ') || 'nothing to clear'}`, 'success');
+    closeSettingsModal();
+    await init();           // refresh dashboard + header status
+  } catch (e) {
+    showToast(`Failed to clear data: ${e.message}`, 'error');
+  }
+}
+
 async function showSettingsModal() {
   document.getElementById('settingsModal').style.display = 'flex';
   try {
