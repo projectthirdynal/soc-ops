@@ -46,7 +46,7 @@ ASNClaimsProcessor-Setup-1.0.2.exe
 
 ### Step 2 — Run the installer
 
-1. Double-click `ASNClaimsProcessor-Setup-1.0.2.exe`
+1. Double-click `ASNClaimsProcessor-Setup-1.0.0.exe`
 2. If Windows SmartScreen appears, click **More info → Run anyway**
 3. Follow the installer prompts (default install path is recommended)
 4. Click **Finish** — the app will launch automatically
