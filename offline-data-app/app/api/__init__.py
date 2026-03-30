@@ -23,6 +23,7 @@ __all__ = ["create_app", "acquire_operation", "release_operation"]
 _TRIAL_EXEMPT = frozenset({
     "/api/health",
     "/api/trial/status",
+    "/api/trial/activate",
 })
 
 # Paths that should not be logged to avoid noise

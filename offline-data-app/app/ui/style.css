@@ -1038,6 +1038,83 @@ tr:hover td { background: var(--brand-50); }
   margin-top: .5rem;
 }
 
+.trial-machine-id {
+  background: var(--bg-main);
+  border: 1px solid var(--border-light);
+  border-radius: .5rem;
+  padding: .6rem 1rem;
+  margin-top: 1rem;
+  font-size: .82rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  justify-content: center;
+}
+
+.trial-machine-id code {
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: .05em;
+  font-size: .88rem;
+}
+
+.btn-copy-machine {
+  background: none;
+  border: 1px solid var(--border-light);
+  border-radius: .35rem;
+  cursor: pointer;
+  padding: .15rem .4rem;
+  font-size: .85rem;
+  color: var(--text-secondary);
+}
+.btn-copy-machine:hover { background: var(--bg-card); }
+
+.trial-activate-form {
+  margin-top: 1.25rem;
+}
+
+.trial-activate-form label {
+  display: block;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: .4rem;
+}
+
+.trial-key-row {
+  display: flex;
+  gap: .5rem;
+}
+
+.trial-key-row input {
+  flex: 1;
+  padding: .6rem .9rem;
+  font-size: 1.05rem;
+  font-family: monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border: 2px solid var(--border-light);
+  border-radius: .5rem;
+  text-align: center;
+  outline: none;
+  transition: border-color .2s;
+}
+.trial-key-row input:focus { border-color: var(--brand-500); }
+
+.trial-key-row .btn {
+  flex-shrink: 0;
+  padding: .6rem 1.5rem;
+  font-weight: 700;
+}
+
+.trial-activate-error {
+  color: #dc2626;
+  font-size: .82rem;
+  margin-top: .45rem;
+  font-weight: 600;
+}
+
 /* ===================================================================
    UPDATE BANNER
    =================================================================== */

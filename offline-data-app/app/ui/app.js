@@ -1303,10 +1303,22 @@ async function prefillExportPaths() {
 // ============================================================  TRIAL  ====
 
 let _trialCountdownTimer = null;
+let _trialMachineId = '';
 
 async function checkTrial() {
   try {
     const s = await apiFetch('/api/trial/status');
+    _trialMachineId = s.machine_id || '';
+    // Populate machine ID in the lock screen
+    const mid = document.getElementById('trialMachineId');
+    if (mid) mid.textContent = _trialMachineId;
+
+    // Already activated — hide trial UI entirely
+    if (s.activated) {
+      document.getElementById('trialBanner').style.display = 'none';
+      document.getElementById('trialExpiredOverlay').style.display = 'none';
+      return;
+    }
     if (s.expired || s.tampered) {
       _showTrialExpired();
       return;
@@ -1318,11 +1330,12 @@ async function checkTrial() {
 }
 
 function _showTrialExpired() {
-  // Show full-screen lock, hide everything else
   document.getElementById('trialBanner').style.display = 'none';
   document.getElementById('trialExpiredOverlay').style.display = 'flex';
-  // Disable all nav buttons so keyboard-tab can't reach app content
   document.querySelectorAll('.tab-btn, .header-icon-btn').forEach(b => b.disabled = true);
+  // Focus the activation input for convenience
+  const inp = document.getElementById('activationKeyInput');
+  if (inp) setTimeout(() => inp.focus(), 200);
 }
 
 function _startTrialCountdown(remainingSeconds) {
@@ -1350,6 +1363,77 @@ function _startTrialCountdown(remainingSeconds) {
   banner.style.display = 'flex';
   _tick();
   _trialCountdownTimer = setInterval(_tick, 1000);
+}
+
+// --- Activation key input ---
+
+function copyMachineId() {
+  if (!_trialMachineId) return;
+  navigator.clipboard.writeText(_trialMachineId).then(() => {
+    const btn = document.querySelector('.btn-copy-machine');
+    if (btn) { btn.textContent = '\u2705'; setTimeout(() => btn.textContent = '\uD83D\uDCCB', 1500); }
+  });
+}
+
+// Auto-format key input as XXXX-XXXX-XXXX-XXXX
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('activationKeyInput');
+  if (!inp) return;
+  inp.addEventListener('input', () => {
+    let v = inp.value.replace(/[^A-Fa-f0-9]/g, '').toUpperCase().slice(0, 16);
+    let formatted = v.match(/.{1,4}/g)?.join('-') || '';
+    inp.value = formatted;
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitActivation();
+  });
+});
+
+async function submitActivation() {
+  const inp = document.getElementById('activationKeyInput');
+  const errEl = document.getElementById('activationError');
+  const btn = document.getElementById('activateBtn');
+  if (!inp) return;
+
+  const key = inp.value.trim();
+  if (key.length < 19) {
+    errEl.textContent = 'Please enter a complete activation key (XXXX-XXXX-XXXX-XXXX).';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+  errEl.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/api/trial/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    if (res.success) {
+      // Success — hide overlay and fully init the app
+      document.getElementById('trialExpiredOverlay').style.display = 'none';
+      document.getElementById('trialBanner').style.display = 'none';
+      if (_trialCountdownTimer) clearInterval(_trialCountdownTimer);
+      document.querySelectorAll('.tab-btn, .header-icon-btn').forEach(b => b.disabled = false);
+      // Run full init now that the app is unlocked
+      await init();
+      prefillExportPaths();
+      resumeSplitIfRunning();
+      silentUpdateCheck();
+    } else {
+      errEl.textContent = res.error || 'Invalid activation key.';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    errEl.textContent = 'Activation failed. Please try again.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Activate';
+  }
 }
 
 async function fullInit() {
