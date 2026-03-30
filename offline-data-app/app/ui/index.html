@@ -19,7 +19,12 @@
 <!-- Trial countdown banner -->
 <div id="trialBanner" class="trial-banner" style="display:none">
   <span>&#9201; Free trial — <strong id="trialTimeLeft"></strong> remaining</span>
-  <span class="trial-banner-sub">Contact <strong>hello@asianow.ph</strong> to activate your licence.</span>
+  <span class="trial-banner-sub">Have an activation key?</span>
+  <div class="trial-banner-key">
+    <input id="bannerKeyInput" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19" spellcheck="false" autocomplete="off" />
+    <button class="btn btn-sm btn-success" id="bannerActivateBtn" onclick="submitBannerActivation()">Activate</button>
+  </div>
+  <span id="bannerActivateMsg" class="trial-banner-msg" style="display:none"></span>
 </div>
 
 <!-- Trial expired lock screen (full-page, non-dismissible) -->

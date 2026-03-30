@@ -1375,18 +1375,19 @@ function copyMachineId() {
   });
 }
 
-// Auto-format key input as XXXX-XXXX-XXXX-XXXX
-document.addEventListener('DOMContentLoaded', () => {
-  const inp = document.getElementById('activationKeyInput');
+// Auto-format key inputs as XXXX-XXXX-XXXX-XXXX
+function _setupKeyInput(inputId, submitFn) {
+  const inp = document.getElementById(inputId);
   if (!inp) return;
   inp.addEventListener('input', () => {
     let v = inp.value.replace(/[^A-Fa-f0-9]/g, '').toUpperCase().slice(0, 16);
-    let formatted = v.match(/.{1,4}/g)?.join('-') || '';
-    inp.value = formatted;
+    inp.value = v.match(/.{1,4}/g)?.join('-') || '';
   });
-  inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') submitActivation();
-  });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') submitFn(); });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  _setupKeyInput('activationKeyInput', submitActivation);
+  _setupKeyInput('bannerKeyInput', submitBannerActivation);
 });
 
 async function submitActivation() {
@@ -1430,6 +1431,48 @@ async function submitActivation() {
   } catch (e) {
     errEl.textContent = 'Activation failed. Please try again.';
     errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Activate';
+  }
+}
+
+async function submitBannerActivation() {
+  const inp = document.getElementById('bannerKeyInput');
+  const msg = document.getElementById('bannerActivateMsg');
+  const btn = document.getElementById('bannerActivateBtn');
+  if (!inp) return;
+
+  const key = inp.value.trim();
+  if (key.length < 19) {
+    msg.textContent = 'Enter full key';
+    msg.className = 'trial-banner-msg error';
+    msg.style.display = 'inline';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  msg.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/api/trial/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    if (res.success) {
+      if (_trialCountdownTimer) clearInterval(_trialCountdownTimer);
+      document.getElementById('trialBanner').style.display = 'none';
+    } else {
+      msg.textContent = res.error || 'Invalid key';
+      msg.className = 'trial-banner-msg error';
+      msg.style.display = 'inline';
+    }
+  } catch (e) {
+    msg.textContent = 'Failed';
+    msg.className = 'trial-banner-msg error';
+    msg.style.display = 'inline';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Activate';

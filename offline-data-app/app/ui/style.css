@@ -981,6 +981,35 @@ tr:hover td { background: var(--brand-50); }
   font-size: .78rem;
 }
 
+.trial-banner-key {
+  display: flex;
+  gap: .35rem;
+  align-items: center;
+}
+
+.trial-banner-key input {
+  padding: .25rem .55rem;
+  font-size: .78rem;
+  font-family: monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border: 1.5px solid rgba(255,255,255,.4);
+  border-radius: .35rem;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  width: 170px;
+  outline: none;
+}
+.trial-banner-key input::placeholder { color: rgba(255,255,255,.5); }
+.trial-banner-key input:focus { border-color: #fff; background: rgba(255,255,255,.25); }
+
+.trial-banner-msg {
+  font-size: .75rem;
+  font-weight: 400;
+}
+.trial-banner-msg.success { color: #bbf7d0; }
+.trial-banner-msg.error { color: #fecaca; }
+
 .trial-overlay {
   position: fixed;
   inset: 0;
