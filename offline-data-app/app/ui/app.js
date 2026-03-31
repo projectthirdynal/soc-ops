@@ -1303,17 +1303,10 @@ async function prefillExportPaths() {
 // ============================================================  TRIAL  ====
 
 let _trialCountdownTimer = null;
-let _trialMachineId = '';
 
 async function checkTrial() {
   try {
     const s = await apiFetch('/api/trial/status');
-    _trialMachineId = s.machine_id || '';
-    // Populate machine ID in the lock screen
-    const mid = document.getElementById('trialMachineId');
-    if (mid) mid.textContent = _trialMachineId;
-
-    // Already activated — hide trial UI entirely
     if (s.activated) {
       document.getElementById('trialBanner').style.display = 'none';
       document.getElementById('trialExpiredOverlay').style.display = 'none';
@@ -1333,7 +1326,6 @@ function _showTrialExpired() {
   document.getElementById('trialBanner').style.display = 'none';
   document.getElementById('trialExpiredOverlay').style.display = 'flex';
   document.querySelectorAll('.tab-btn, .header-icon-btn').forEach(b => b.disabled = true);
-  // Focus the activation input for convenience
   const inp = document.getElementById('activationKeyInput');
   if (inp) setTimeout(() => inp.focus(), 200);
 }
@@ -1365,29 +1357,10 @@ function _startTrialCountdown(remainingSeconds) {
   _trialCountdownTimer = setInterval(_tick, 1000);
 }
 
-// --- Activation key input ---
-
-function copyMachineId() {
-  if (!_trialMachineId) return;
-  navigator.clipboard.writeText(_trialMachineId).then(() => {
-    const btn = document.querySelector('.btn-copy-machine');
-    if (btn) { btn.textContent = '\u2705'; setTimeout(() => btn.textContent = '\uD83D\uDCCB', 1500); }
-  });
-}
-
-// Auto-format key inputs as XXXX-XXXX-XXXX-XXXX
-function _setupKeyInput(inputId, submitFn) {
-  const inp = document.getElementById(inputId);
-  if (!inp) return;
-  inp.addEventListener('input', () => {
-    let v = inp.value.replace(/[^A-Fa-f0-9]/g, '').toUpperCase().slice(0, 16);
-    inp.value = v.match(/.{1,4}/g)?.join('-') || '';
-  });
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') submitFn(); });
-}
+// Submit activation on Enter key
 document.addEventListener('DOMContentLoaded', () => {
-  _setupKeyInput('activationKeyInput', submitActivation);
-  _setupKeyInput('bannerKeyInput', submitBannerActivation);
+  const inp = document.getElementById('activationKeyInput');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') submitActivation(); });
 });
 
 async function submitActivation() {
@@ -1397,8 +1370,8 @@ async function submitActivation() {
   if (!inp) return;
 
   const key = inp.value.trim();
-  if (key.length < 19) {
-    errEl.textContent = 'Please enter a complete activation key (XXXX-XXXX-XXXX-XXXX).';
+  if (!key) {
+    errEl.textContent = 'Please enter your activation code.';
     errEl.style.display = 'block';
     return;
   }
@@ -1414,18 +1387,16 @@ async function submitActivation() {
       body: JSON.stringify({ key }),
     });
     if (res.success) {
-      // Success — hide overlay and fully init the app
       document.getElementById('trialExpiredOverlay').style.display = 'none';
       document.getElementById('trialBanner').style.display = 'none';
       if (_trialCountdownTimer) clearInterval(_trialCountdownTimer);
       document.querySelectorAll('.tab-btn, .header-icon-btn').forEach(b => b.disabled = false);
-      // Run full init now that the app is unlocked
       await init();
       prefillExportPaths();
       resumeSplitIfRunning();
       silentUpdateCheck();
     } else {
-      errEl.textContent = res.error || 'Invalid activation key.';
+      errEl.textContent = res.error || 'Invalid activation code.';
       errEl.style.display = 'block';
     }
   } catch (e) {
@@ -1437,52 +1408,9 @@ async function submitActivation() {
   }
 }
 
-async function submitBannerActivation() {
-  const inp = document.getElementById('bannerKeyInput');
-  const msg = document.getElementById('bannerActivateMsg');
-  const btn = document.getElementById('bannerActivateBtn');
-  if (!inp) return;
-
-  const key = inp.value.trim();
-  if (key.length < 19) {
-    msg.textContent = 'Enter full key';
-    msg.className = 'trial-banner-msg error';
-    msg.style.display = 'inline';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = '...';
-  msg.style.display = 'none';
-
-  try {
-    const res = await apiFetch('/api/trial/activate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-    if (res.success) {
-      if (_trialCountdownTimer) clearInterval(_trialCountdownTimer);
-      document.getElementById('trialBanner').style.display = 'none';
-    } else {
-      msg.textContent = res.error || 'Invalid key';
-      msg.className = 'trial-banner-msg error';
-      msg.style.display = 'inline';
-    }
-  } catch (e) {
-    msg.textContent = 'Failed';
-    msg.className = 'trial-banner-msg error';
-    msg.style.display = 'inline';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Activate';
-  }
-}
-
 async function fullInit() {
   loadVersionFooter();
   await checkTrial();
-  // Abort remaining init if trial expired (overlay is showing)
   if (document.getElementById('trialExpiredOverlay').style.display !== 'none') return;
   await init();
   prefillExportPaths();
